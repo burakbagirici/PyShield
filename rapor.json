@@ -1,0 +1,44 @@
+{
+  "analysis_timestamp": "2026-05-22T19:44:09.548630700+00:00",
+  "project_path": "c:\\Users\\Burak\\ai_code_analyzer\\test_dangerous_code",
+  "total_files_scanned": 2,
+  "total_errors_found": 12,
+  "analysis_status": "⚠️ WARNINGS_FOUND",
+  "files": [
+    {
+      "file_path": "c:\\Users\\Burak\\ai_code_analyzer\\test_dangerous_code\\dangerous.py",
+      "total_errors": 5,
+      "error_breakdown": {
+        "syntax_errors": 0,
+        "hallucinations": 0,
+        "missing_imports": 0,
+        "undefined_variables": 0,
+        "unused_code": 3,
+        "security_issues": 2,
+        "infinite_loops": 0
+      }
+    },
+    {
+      "file_path": "c:\\Users\\Burak\\ai_code_analyzer\\test_dangerous_code\\dangerous2.py",
+      "total_errors": 7,
+      "error_breakdown": {
+        "syntax_errors": 0,
+        "hallucinations": 1,
+        "missing_imports": 0,
+        "undefined_variables": 0,
+        "unused_code": 3,
+        "security_issues": 3,
+        "infinite_loops": 0
+      }
+    }
+  ],
+  "summary": {
+    "syntax_errors": 0,
+    "hallucinations": 1,
+    "missing_imports": 0,
+    "undefined_variables": 0,
+    "unused_code": 6,
+    "security_issues": 5,
+    "infinite_loops": 0
+  }
+}

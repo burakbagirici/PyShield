@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PyShield — AI Kod Analizi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: radial-gradient(ellipse at top, #1e293b 0%, #0f172a 55%, #020617 100%);
+      color: #f8fafc;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    .glass {
+      background: rgba(30, 41, 59, 0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    .accordion-panel { display: none; }
+    .accordion-panel.open { display: block; }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.9); opacity: 0.6; }
+      50% { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.6; }
+    }
+    .loader-ring { animation: pulse-ring 1.6s ease-in-out infinite; }
+    @keyframes scan-line {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100%); }
+    }
+    .scan-line {
+      animation: scan-line 1.8s linear infinite;
+      background: linear-gradient(180deg, transparent, rgba(56, 189, 248, 0.35), transparent);
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div id="app" class="max-w-6xl mx-auto px-6 py-10 space-y-8">
+    <header class="text-center space-y-3">
+      <p class="text-sky-400 text-sm font-semibold tracking-widest uppercase">PyShield</p>
+      <h1 class="text-3xl md:text-4xl font-bold text-white">Yapay Zeka Python Kod Analizi</h1>
+      <p class="text-slate-400 max-w-xl mx-auto text-sm md:text-base">
+        Bilgisayarınızdaki bir klasörü seçin; motor sözdizimi, halüsinasyon, güvenlik ve döngü risklerini otomatik tarar.
+      </p>
+    </header>
+
+    <section id="picker-section" class="flex flex-col items-center gap-4 py-8">
+      <button
+        id="btn-pick-folder"
+        type="button"
+        class="group relative px-10 py-5 rounded-2xl text-lg font-bold text-white bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 shadow-lg shadow-sky-900/40 transition transform hover:scale-[1.02] active:scale-[0.98]"
+      >
+        <span class="relative z-10">Analiz Edilecek Klasörü Seç</span>
+        <span class="absolute inset-0 rounded-2xl bg-white/10 opacity-0 group-hover:opacity-100 transition"></span>
+      </button>
+      <p id="selected-path" class="text-slate-500 text-sm font-mono max-w-full truncate hidden"></p>
+    </section>
+
+    <section id="loading-section" class="hidden glass rounded-2xl p-10 text-center space-y-6">
+      <div class="relative w-24 h-24 mx-auto rounded-full border-2 border-sky-500/40 loader-ring flex items-center justify-center overflow-hidden">
+        <div class="absolute inset-0 scan-line"></div>
+        <svg class="w-10 h-10 text-sky-400 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+      <p class="text-xl font-semibold text-sky-200">Yapay Zeka Kodları Taranıyor...</p>
+      <p class="text-slate-400 text-sm">Lütfen bekleyin, analiz paralel olarak çalışıyor.</p>
+    </section>
+
+    <section id="error-banner" class="hidden glass rounded-xl p-4 border border-rose-500/40 text-rose-300 text-sm"></section>
+
+    <section id="results-section" class="hidden space-y-8">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="glass rounded-xl p-5 border-l-4 border-sky-500">
+          <p class="text-slate-400 text-xs uppercase font-semibold">Taranan Dosya</p>
+          <p id="metric-files" class="text-4xl font-bold mt-1">0</p>
+        </div>
+        <div class="glass rounded-xl p-5 border-l-4 border-rose-500">
+          <p class="text-slate-400 text-xs uppercase font-semibold">Toplam Sorun</p>
+          <p id="metric-total" class="text-4xl font-bold mt-1">0</p>
+        </div>
+        <div class="glass rounded-xl p-5 border-l-4 border-emerald-500">
+          <p class="text-slate-400 text-xs uppercase font-semibold">Durum</p>
+          <p id="metric-status" class="text-2xl font-bold mt-2">—</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass rounded-xl p-5 text-center border border-rose-500/30 bg-rose-500/10">
+          <p id="card-syntax" class="text-4xl font-bold text-rose-400">0</p>
+          <p class="text-xs font-semibold uppercase tracking-wide text-rose-200/80 mt-2">Sözdizimi Hataları</p>
+        </div>
+        <div class="glass rounded-xl p-5 text-center border border-purple-500/30 bg-purple-500/10">
+          <p id="card-hallucination" class="text-4xl font-bold text-purple-400">0</p>
+          <p class="text-xs font-semibold uppercase tracking-wide text-purple-200/80 mt-2">Halüsinasyon Fonksiyonlar</p>
+        </div>
+        <div class="glass rounded-xl p-5 text-center border border-red-500/30 bg-red-500/10">
+          <p id="card-security" class="text-4xl font-bold text-red-400">0</p>
+          <p class="text-xs font-semibold uppercase tracking-wide text-red-200/80 mt-2">Güvenlik İhlalleri</p>
+        </div>
+        <div class="glass rounded-xl p-5 text-center border border-pink-500/30 bg-pink-500/10">
+          <p id="card-loops" class="text-4xl font-bold text-pink-400">0</p>
+          <p class="text-xs font-semibold uppercase tracking-wide text-pink-200/80 mt-2">Sonsuz Döngüler</p>
+        </div>
+      </div>
+
+      <div class="glass rounded-xl p-5">
+        <h2 class="text-lg font-bold mb-4 border-b border-slate-600 pb-2">Diğer Bulgular</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+          <div class="rounded-lg bg-slate-800/60 p-3 flex justify-between"><span>Eksik Import</span><span id="extra-imports" class="font-bold text-amber-400">0</span></div>
+          <div class="rounded-lg bg-slate-800/60 p-3 flex justify-between"><span>Tanımsız Değişken</span><span id="extra-undefined" class="font-bold text-orange-400">0</span></div>
+          <div class="rounded-lg bg-slate-800/60 p-3 flex justify-between"><span>Kullanılmayan Kod</span><span id="extra-unused" class="font-bold text-slate-300">0</span></div>
+        </div>
+      </div>
+
+      <div class="glass rounded-xl overflow-hidden">
+        <div class="p-5 border-b border-slate-600">
+          <h2 class="text-lg font-bold">Hatalı Dosyalar</h2>
+          <p class="text-slate-400 text-sm mt-1">Detay için bir dosyaya tıklayın.</p>
+        </div>
+        <div id="file-accordion" class="divide-y divide-slate-700/50"></div>
+      </div>
+
+      <div class="text-center">
+        <button id="btn-new-scan" type="button" class="text-sky-400 hover:text-sky-300 text-sm font-semibold underline">
+          Yeni klasör tara
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function getTauri() {
+      return window.__TAURI__;
+    }
+
+    function showError(msg) {
+      const el = $('error-banner');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    function hideError() {
+      $('error-banner').classList.add('hidden');
+    }
+
+    function setLoading(on) {
+      $('loading-section').classList.toggle('hidden', !on);
+      $('picker-section').classList.toggle('hidden', on);
+      $('results-section').classList.add('hidden');
+      hideError();
+    }
+
+    function escapeHtml(text) {
+      const d = document.createElement('div');
+      d.textContent = text;
+      return d.innerHTML;
+    }
+
+    /** ErrorSummary / ErrorBreakdown serde alanları (snake_case JSON). */
+    const SUMMARY_TO_CARD = [
+      ['syntax_errors', 'card-syntax'],
+      ['hallucinations', 'card-hallucination'],
+      ['security_issues', 'card-security'],
+      ['infinite_loops', 'card-loops'],
+    ];
+    const SUMMARY_TO_EXTRA = [
+      ['missing_imports', 'extra-imports'],
+      ['undefined_variables', 'extra-undefined'],
+      ['unused_code', 'extra-unused'],
+    ];
+
+    function parseAnalysisReport(raw) {
+      if (raw == null) return null;
+      if (typeof raw === 'object') return raw;
+      if (typeof raw === 'string') return JSON.parse(raw);
+      return null;
+    }
+
+    function countFromSummary(summary, field) {
+      const n = summary?.[field];
+      return typeof n === 'number' && !Number.isNaN(n) ? n : 0;
+    }
+
+    function formatFileBreakdown(b) {
+      if (!b) return '';
+      const parts = [];
+      if (b.syntax_errors) parts.push(`Sözdizimi ${b.syntax_errors}`);
+      if (b.hallucinations) parts.push(`Halüsinasyon ${b.hallucinations}`);
+      if (b.security_issues) parts.push(`Güvenlik ${b.security_issues}`);
+      if (b.infinite_loops) parts.push(`Döngü ${b.infinite_loops}`);
+      if (b.missing_imports) parts.push(`Import ${b.missing_imports}`);
+      if (b.undefined_variables) parts.push(`Tanımsız ${b.undefined_variables}`);
+      if (b.unused_code) parts.push(`Kullanılmayan ${b.unused_code}`);
+      return parts.join(' · ');
+    }
+
+    function issueAccentClass(category = '') {
+      return /Güvenlik|Sözdizimi|Security|Syntax/i.test(category)
+        ? 'border-l-rose-500'
+        : 'border-l-amber-400';
+    }
+
+    function renderIssueCard(issue) {
+      const category = issue.category || 'Bulgu';
+      const line = issue.line ?? 0;
+      const column = issue.column ?? 0;
+      const snippet = issue.code_snippet || '';
+      const message = issue.message || 'Açıklama yok.';
+
+      return `
+        <article class="rounded-lg border border-slate-700/70 ${issueAccentClass(category)} border-l-4 bg-slate-900/70 p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs font-bold uppercase tracking-wide text-slate-300">${escapeHtml(category)}</span>
+            <span class="text-xs font-semibold text-slate-400">Satır ${line}, Sütun ${column}</span>
+          </div>
+          <pre class="mt-3 bg-slate-950 font-mono p-2 rounded text-xs text-emerald-400 whitespace-pre-wrap overflow-x-auto">${escapeHtml(snippet || '(kod satırı alınamadı)')}</pre>
+          <p class="mt-3 text-sm text-slate-300 leading-relaxed">${escapeHtml(message)}</p>
+        </article>`;
+    }
+
+    function renderReport(data) {
+      const s = data.summary || {};
+      $('metric-files').textContent = data.total_files_scanned ?? 0;
+      $('metric-total').textContent = data.total_errors_found ?? 0;
+      $('metric-status').textContent = data.analysis_status ?? '—';
+
+      for (const [field, elId] of SUMMARY_TO_CARD) {
+        $(elId).textContent = countFromSummary(s, field);
+      }
+      for (const [field, elId] of SUMMARY_TO_EXTRA) {
+        $(elId).textContent = countFromSummary(s, field);
+      }
+
+      const accordion = $('file-accordion');
+      accordion.innerHTML = '';
+
+      const files = (data.files || []).filter((f) => (f.total_errors || 0) > 0);
+      if (files.length === 0) {
+        accordion.innerHTML = '<p class="p-6 text-emerald-400 text-sm">Tüm dosyalar temiz görünüyor.</p>';
+      } else {
+        files.forEach((file, i) => {
+          const id = `acc-${i}`;
+          const issues = Array.isArray(file.issues) ? file.issues : [];
+          const details = issues.length
+            ? issues.map(renderIssueCard).join('')
+            : `<pre class="font-mono text-xs text-slate-300 whitespace-pre-wrap overflow-x-auto">${escapeHtml(file.output_buffer || 'Detay yok.')}</pre>`;
+          const breakdown = formatFileBreakdown(file.error_breakdown);
+          const row = document.createElement('div');
+          row.innerHTML = `
+            <button type="button" data-acc="${id}" class="acc-toggle w-full text-left px-5 py-4 hover:bg-slate-800/50 flex items-center justify-between gap-4">
+              <div class="flex flex-col gap-1 min-w-0 flex-1">
+                <div class="flex items-center gap-3 min-w-0">
+                  <span class="shrink-0 px-2 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${file.total_errors} sorun</span>
+                  <span class="font-mono text-sm text-slate-200 truncate">${escapeHtml(file.file_path)}</span>
+                </div>
+                ${breakdown ? `<p class="text-xs text-slate-400 truncate pl-0.5">${escapeHtml(breakdown)}</p>` : ''}
+              </div>
+              <svg class="w-5 h-5 text-slate-400 shrink-0 acc-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="${id}" class="accordion-panel border-t border-slate-700/50 bg-slate-900/40 px-5 py-4">
+              <div class="space-y-3">${details}</div>
+            </div>`;
+          accordion.appendChild(row);
+        });
+
+        accordion.querySelectorAll('.acc-toggle').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const panel = document.getElementById(btn.dataset.acc);
+            const open = panel.classList.toggle('open');
+            btn.querySelector('.acc-icon').style.transform = open ? 'rotate(180deg)' : '';
+          });
+        });
+      }
+
+      $('results-section').classList.remove('hidden');
+      $('picker-section').classList.remove('hidden');
+    }
+
+    async function pickFolderAndAnalyze() {
+      const tauri = getTauri();
+      if (!tauri?.dialog?.open || !tauri?.core?.invoke) {
+        showError('Tauri ortamı bulunamadı. Uygulamayı "cargo tauri dev" ile çalıştırın.');
+        return;
+      }
+
+      hideError();
+      let selected;
+      try {
+        selected = await tauri.dialog.open({
+          directory: true,
+          multiple: false,
+          title: 'Analiz edilecek klasörü seçin',
+        });
+      } catch (e) {
+        showError('Klasör seçimi iptal edildi veya başarısız: ' + (e?.message || e));
+        return;
+      }
+
+      if (!selected) return;
+
+      const folderPath = Array.isArray(selected) ? selected[0] : selected;
+      const pathEl = $('selected-path');
+      pathEl.textContent = folderPath;
+      pathEl.classList.remove('hidden');
+
+      setLoading(true);
+      try {
+        const raw = await tauri.core.invoke('run_analysis_on_folder', { folderPath });
+        const report = parseAnalysisReport(raw);
+        if (!report?.summary) {
+          throw new Error('Analiz yanıtında summary eksik; JSON şeması beklenen formatta değil.');
+        }
+        setLoading(false);
+        renderReport(report);
+      } catch (e) {
+        setLoading(false);
+        showError('Analiz hatası: ' + (e?.message || String(e)));
+      }
+    }
+
+    $('btn-pick-folder').addEventListener('click', pickFolderAndAnalyze);
+    $('btn-new-scan').addEventListener('click', () => {
+      $('results-section').classList.add('hidden');
+      $('selected-path').classList.add('hidden');
+      hideError();
+      pickFolderAndAnalyze();
+    });
+  </script>
+</body>
+</html>
