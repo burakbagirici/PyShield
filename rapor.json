@@ -1,44 +1,203 @@
 {
-  "analysis_timestamp": "2026-05-22T19:44:09.548630700+00:00",
-  "project_path": "c:\\Users\\Burak\\ai_code_analyzer\\test_dangerous_code",
-  "total_files_scanned": 2,
-  "total_errors_found": 12,
+  "analysis_timestamp": "2026-05-23T22:13:44.979456100+00:00",
+  "project_path": "C:\\tmp\\ai_code_analyzer_single_test",
+  "total_files_scanned": 1,
+  "total_errors_found": 15,
   "analysis_status": "⚠️ WARNINGS_FOUND",
   "files": [
     {
-      "file_path": "c:\\Users\\Burak\\ai_code_analyzer\\test_dangerous_code\\dangerous.py",
-      "total_errors": 5,
+      "file_path": "C:\\tmp\\ai_code_analyzer_single_test\\test_false_positives.py",
+      "output_buffer": "--- Akıllı Kural: Çağrılan Fonksiyonlar Taranıyor ---\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: len\n📌 Yapay zeka şu fonksiyonu çağırdı: Path\n📌 Yapay zeka şu fonksiyonu çağırdı: len\n📌 Yapay zeka şu fonksiyonu çağırdı: int\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: sum\n📌 Yapay zeka şu fonksiyonu çağırdı: max\n📌 Yapay zeka şu fonksiyonu çağırdı: min\n📌 Yapay zeka şu fonksiyonu çağırdı: list\n📌 Yapay zeka şu fonksiyonu çağırdı: map\n📌 Yapay zeka şu fonksiyonu çağırdı: list\n📌 Yapay zeka şu fonksiyonu çağırdı: filter\n📌 Yapay zeka şu fonksiyonu çağırdı: sorted\n📌 Yapay zeka şu fonksiyonu çağırdı: list\n📌 Yapay zeka şu fonksiyonu çağırdı: reversed\n📌 Yapay zeka şu fonksiyonu çağırdı: list\n📌 Yapay zeka şu fonksiyonu çağırdı: enumerate\n📌 Yapay zeka şu fonksiyonu çağırdı: list\n📌 Yapay zeka şu fonksiyonu çağırdı: zip\n📌 Yapay zeka şu fonksiyonu çağırdı: isinstance\n📌 Yapay zeka şu fonksiyonu çağırdı: type\n📌 Yapay zeka şu fonksiyonu çağırdı: dir\n📌 Yapay zeka şu fonksiyonu çağırdı: func\n📌 Yapay zeka şu fonksiyonu çağırdı: range\n📌 Yapay zeka şu fonksiyonu çağırdı: range\n📌 Yapay zeka şu fonksiyonu çağırdı: range\n📌 Yapay zeka şu fonksiyonu çağırdı: list\n📌 Yapay zeka şu fonksiyonu çağırdı: CodeAnalyzer\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: builtin_operations\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: handle_errors\n📌 Yapay zeka şu fonksiyonu çağırdı: print\n📌 Yapay zeka şu fonksiyonu çağırdı: comprehensions\n⚠️ Potansiyel Halüsinasyon Riski (Yıldız Import Kaynaklı): 3\n   1. Path\n   2. func\n   3. CodeAnalyzer\n\n📦 Kodda bulunan import'lar:\n   ✓ argparse\n   ✓ os\n   ✓ sys\n   ✓ pathlib\n\n⚠️ Potensiyel Eksik Import (Yıldız Import Kaynaklı): 5 adet\n   1. parser\n   2. parser\n   3. p\n   4. data\n   5. analyzer\n\n⚠️  Tanımlanmamış değişkenler: 6 adet\n   1. x\n   2. x\n   3. x\n   4. x\n   5. args\n   6. args\n\n⚠️  Kullanılmayan kod: 9 adet\n   1. os\n   2. sys\n   3. result\n   4. reversed_nums\n   5. enumerated\n   6. zipped\n   7. is_list\n   8. is_type\n   9. attributes\n✅ Güvenlik ihlali tespit edilmedi!\n✅ Tehlikeli dinamik kod yürütme tespit edilmedi!\n✅ Sonsuz döngü tespit edilmedi!\n\n📋 === DOSYA ÖZETİ ===\nSözdizimi Hataları        : 0\nHalüsinasyon Fonksiyonları: 0\nEksik Import'lar          : 0\nTanımlanmamış Değişkenler : 6\nKullanılmayan Kod         : 9\nGüvenlik İhlalleri        : 0\nSonsuz Döngü Riskleri     : 0\n─────────────────────────────────\nDosyadaki Toplam Sorun    : 15\n",
+      "issues": [
+        {
+          "category": "Potansiyel Halüsinasyon Riski (Yıldız Import Kaynaklı)",
+          "line": 70,
+          "column": 9,
+          "message": "'Path' yerelde tanımlanmamıştır. Yıldız (*) import içerisinden çağrılıyor olabilir; ancak kod okunabilirliği ve siber güvenlik standartları gereği açıkça import edilmesi önerilir.",
+          "code_snippet": "p = Path(\".\")",
+          "severity": "WARNING"
+        },
+        {
+          "category": "Potansiyel Halüsinasyon Riski (Yıldız Import Kaynaklı)",
+          "line": 164,
+          "column": 16,
+          "message": "'func' yerelde tanımlanmamıştır. Yıldız (*) import içerisinden çağrılıyor olabilir; ancak kod okunabilirliği ve siber güvenlik standartları gereği açıkça import edilmesi önerilir.",
+          "code_snippet": "return func(*args, **kwargs)",
+          "severity": "WARNING"
+        },
+        {
+          "category": "Potansiyel Halüsinasyon Riski (Yıldız Import Kaynaklı)",
+          "line": 207,
+          "column": 16,
+          "message": "'CodeAnalyzer' yerelde tanımlanmamıştır. Yıldız (*) import içerisinden çağrılıyor olabilir; ancak kod okunabilirliği ve siber güvenlik standartları gereği açıkça import edilmesi önerilir.",
+          "code_snippet": "analyzer = CodeAnalyzer(__name__)",
+          "severity": "WARNING"
+        },
+        {
+          "category": "Potensiyel Eksik Import (Yıldız Import Kaynaklı)",
+          "line": 25,
+          "column": 1,
+          "message": "'parser' kullanılıyor ancak ilgili import bulunamadı. Yıldız (*) import içerisinden çağrılıyor olabilir; açıkça import edilmesi önerilir.",
+          "code_snippet": "parser.add_argument(",
+          "severity": "WARNING"
+        },
+        {
+          "category": "Potensiyel Eksik Import (Yıldız Import Kaynaklı)",
+          "line": 32,
+          "column": 1,
+          "message": "'parser' kullanılıyor ancak ilgili import bulunamadı. Yıldız (*) import içerisinden çağrılıyor olabilir; açıkça import edilmesi önerilir.",
+          "code_snippet": "parser.add_argument(",
+          "severity": "WARNING"
+        },
+        {
+          "category": "Potensiyel Eksik Import (Yıldız Import Kaynaklı)",
+          "line": 71,
+          "column": 12,
+          "message": "'p' kullanılıyor ancak ilgili import bulunamadı. Yıldız (*) import içerisinden çağrılıyor olabilir; açıkça import edilmesi önerilir.",
+          "code_snippet": "return p.exists()",
+          "severity": "WARNING"
+        },
+        {
+          "category": "Potensiyel Eksik Import (Yıldız Import Kaynaklı)",
+          "line": 79,
+          "column": 26,
+          "message": "'data' kullanılıyor ancak ilgili import bulunamadı. Yıldız (*) import içerisinden çağrılıyor olabilir; açıkça import edilmesi önerilir.",
+          "code_snippet": "self.processed = data.upper()",
+          "severity": "WARNING"
+        },
+        {
+          "category": "Potensiyel Eksik Import (Yıldız Import Kaynaklı)",
+          "line": 208,
+          "column": 11,
+          "message": "'analyzer' kullanılıyor ancak ilgili import bulunamadı. Yıldız (*) import içerisinden çağrılıyor olabilir; açıkça import edilmesi önerilir.",
+          "code_snippet": "print(analyzer.analyze(\"test code\"))",
+          "severity": "WARNING"
+        },
+        {
+          "category": "Tanımsız Değişken",
+          "line": 112,
+          "column": 31,
+          "message": "'x' değişkeni kullanılmadan önce tanımlanmamış görünüyor.",
+          "code_snippet": "squares = list(map(lambda x: x**2, numbers))"
+        },
+        {
+          "category": "Tanımsız Değişken",
+          "line": 112,
+          "column": 34,
+          "message": "'x' değişkeni kullanılmadan önce tanımlanmamış görünüyor.",
+          "code_snippet": "squares = list(map(lambda x: x**2, numbers))"
+        },
+        {
+          "category": "Tanımsız Değişken",
+          "line": 113,
+          "column": 32,
+          "message": "'x' değişkeni kullanılmadan önce tanımlanmamış görünüyor.",
+          "code_snippet": "evens = list(filter(lambda x: x % 2 == 0, numbers))"
+        },
+        {
+          "category": "Tanımsız Değişken",
+          "line": 113,
+          "column": 35,
+          "message": "'x' değişkeni kullanılmadan önce tanımlanmamış görünüyor.",
+          "code_snippet": "evens = list(filter(lambda x: x % 2 == 0, numbers))"
+        },
+        {
+          "category": "Tanımsız Değişken",
+          "line": 163,
+          "column": 18,
+          "message": "'args' değişkeni kullanılmadan önce tanımlanmamış görünüyor.",
+          "code_snippet": "def wrapper(*args, **kwargs):"
+        },
+        {
+          "category": "Tanımsız Değişken",
+          "line": 164,
+          "column": 22,
+          "message": "'args' değişkeni kullanılmadan önce tanımlanmamış görünüyor.",
+          "code_snippet": "return func(*args, **kwargs)"
+        },
+        {
+          "category": "Kullanılmayan Kod",
+          "line": 8,
+          "column": 1,
+          "message": "'os' import olarak tanımlanmış ancak kullanılmıyor.",
+          "code_snippet": "import os"
+        },
+        {
+          "category": "Kullanılmayan Kod",
+          "line": 9,
+          "column": 1,
+          "message": "'sys' import olarak tanımlanmış ancak kullanılmıyor.",
+          "code_snippet": "import sys"
+        },
+        {
+          "category": "Kullanılmayan Kod",
+          "line": 90,
+          "column": 1,
+          "message": "'result' değişken olarak tanımlanmış ancak kullanılmıyor.",
+          "code_snippet": "result = int(\"abc\")"
+        },
+        {
+          "category": "Kullanılmayan Kod",
+          "line": 116,
+          "column": 1,
+          "message": "'reversed_nums' değişken olarak tanımlanmış ancak kullanılmıyor.",
+          "code_snippet": "reversed_nums = list(reversed(numbers))"
+        },
+        {
+          "category": "Kullanılmayan Kod",
+          "line": 118,
+          "column": 1,
+          "message": "'enumerated' değişken olarak tanımlanmış ancak kullanılmıyor.",
+          "code_snippet": "enumerated = list(enumerate(numbers))"
+        },
+        {
+          "category": "Kullanılmayan Kod",
+          "line": 119,
+          "column": 1,
+          "message": "'zipped' değişken olarak tanımlanmış ancak kullanılmıyor.",
+          "code_snippet": "zipped = list(zip(numbers, numbers))"
+        },
+        {
+          "category": "Kullanılmayan Kod",
+          "line": 122,
+          "column": 1,
+          "message": "'is_list' değişken olarak tanımlanmış ancak kullanılmıyor.",
+          "code_snippet": "is_list = isinstance(numbers, list)"
+        },
+        {
+          "category": "Kullanılmayan Kod",
+          "line": 123,
+          "column": 1,
+          "message": "'is_type' değişken olarak tanımlanmış ancak kullanılmıyor.",
+          "code_snippet": "is_type = type(numbers)"
+        },
+        {
+          "category": "Kullanılmayan Kod",
+          "line": 126,
+          "column": 1,
+          "message": "'attributes' değişken olarak tanımlanmış ancak kullanılmıyor.",
+          "code_snippet": "attributes = dir(numbers)"
+        }
+      ],
+      "total_errors": 15,
       "error_breakdown": {
         "syntax_errors": 0,
         "hallucinations": 0,
         "missing_imports": 0,
-        "undefined_variables": 0,
-        "unused_code": 3,
-        "security_issues": 2,
-        "infinite_loops": 0
-      }
-    },
-    {
-      "file_path": "c:\\Users\\Burak\\ai_code_analyzer\\test_dangerous_code\\dangerous2.py",
-      "total_errors": 7,
-      "error_breakdown": {
-        "syntax_errors": 0,
-        "hallucinations": 1,
-        "missing_imports": 0,
-        "undefined_variables": 0,
-        "unused_code": 3,
-        "security_issues": 3,
+        "undefined_variables": 6,
+        "unused_code": 9,
+        "security_issues": 0,
         "infinite_loops": 0
       }
     }
   ],
   "summary": {
     "syntax_errors": 0,
-    "hallucinations": 1,
+    "hallucinations": 0,
     "missing_imports": 0,
-    "undefined_variables": 0,
-    "unused_code": 6,
-    "security_issues": 5,
+    "undefined_variables": 6,
+    "unused_code": 9,
+    "security_issues": 0,
     "infinite_loops": 0
   }
 }

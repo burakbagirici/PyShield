@@ -37,6 +37,7 @@ fn issue_from_node(node: &tree_sitter::Node, source_code: &str, category: &str, 
         column: pos.column + 1,
         message,
         code_snippet: code_snippet_for_line(source_code, line),
+        severity: None,
     }
 }
 
@@ -47,6 +48,7 @@ fn issue_from_line(source_code: &str, category: &str, line: usize, message: Stri
         column: 1,
         message,
         code_snippet: code_snippet_for_line(source_code, line),
+        severity: None,
     }
 }
 
@@ -57,6 +59,8 @@ pub struct Issue {
     pub column: usize,
     pub message: String,
     pub code_snippet: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub severity: Option<String>, // "ERROR", "WARNING", "INFO"
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -205,6 +209,7 @@ fn analyze_single_file(file_path: &str) -> FileAnalysisResult {
         .collect();
         
     let syntax_errors = bulunan_hatalar.len();
+    let file_has_wildcard = rules::has_wildcard_import(root_node);
 
     if !bulunan_hatalar.is_empty() {
         output.push_str("--- Sözdizimi Hataları ---\n");
@@ -235,18 +240,36 @@ fn analyze_single_file(file_path: &str) -> FileAnalysisResult {
             })
             .collect();
 
+        // If wildcard import exists, downgrade hallucination findings to WARNING and
+        // change category to indicate potential risk rather than an outright error.
         hallucinations = hallucinated.len();
+
         if hallucinated.is_empty() {
             output.push_str("✅ Halüsinasyon tespit edilmedi!\n");
         } else {
-            output.push_str(&format!("🚨 Toplam halüsinasyon: {}\n", hallucinated.len()));
+            if file_has_wildcard {
+                output.push_str(&format!("⚠️ Potansiyel Halüsinasyon Riski (Yıldız Import Kaynaklı): {}\n", hallucinated.len()));
+            } else {
+                output.push_str(&format!("🚨 Toplam halüsinasyon: {}\n", hallucinated.len()));
+            }
+
             for (i, (node, name)) in hallucinated.iter().enumerate() {
-                issues.push(issue_from_node(
+                let mut issue = issue_from_node(
                     node,
                     &yapay_zeka_kodu,
                     "Halüsinasyon",
                     format!("'{}' fonksiyonu tanımlı veya bilinen bir Python fonksiyonu değil.", name),
-                ));
+                );
+
+                if file_has_wildcard {
+                    issue.category = "Potansiyel Halüsinasyon Riski (Yıldız Import Kaynaklı)".to_string();
+                    issue.severity = Some("WARNING".to_string());
+                    issue.message = format!("'{}' yerelde tanımlanmamıştır. Yıldız (*) import içerisinden çağrılıyor olabilir; ancak kod okunabilirliği ve siber gelecek standartları gereği açıkça import edilmesi önerilir.", name);
+                } else {
+                    issue.severity = Some("ERROR".to_string());
+                }
+
+                issues.push(issue);
                 output.push_str(&format!("   {}. {}\n", i + 1, name));
             }
         }
@@ -264,16 +287,33 @@ fn analyze_single_file(file_path: &str) -> FileAnalysisResult {
 
         let mut missing_imports_vec = rules::find_missing_imports(root_node, &yapay_zeka_kodu, &imports);
         missing_imports_vec.retain(|(node, _)| should_report_error_for_node(node, &yapay_zeka_kodu));
+
+        // Wildcard import durumunda severity WARNING olur; breakdown gerçek sayıyı korur.
         missing_imports = missing_imports_vec.len();
         if !missing_imports_vec.is_empty() {
-            output.push_str(&format!("\n🔴 Eksik import: {} adet\n", missing_imports_vec.len()));
+            if file_has_wildcard {
+                output.push_str(&format!("\n⚠️ Potensiyel Eksik Import (Yıldız Import Kaynaklı): {} adet\n", missing_imports_vec.len()));
+            } else {
+                output.push_str(&format!("\n🔴 Eksik import: {} adet\n", missing_imports_vec.len()));
+            }
+
             for (i, (node, name)) in missing_imports_vec.iter().enumerate() {
-                issues.push(issue_from_node(
+                let mut issue = issue_from_node(
                     node,
                     &yapay_zeka_kodu,
                     "Eksik Import",
                     format!("'{}' kullanılıyor ancak ilgili import bulunamadı.", name),
-                ));
+                );
+
+                if file_has_wildcard {
+                    issue.category = "Potensiyel Eksik Import (Yıldız Import Kaynaklı)".to_string();
+                    issue.severity = Some("WARNING".to_string());
+                    issue.message = format!("'{}' kullanılıyor ancak ilgili import bulunamadı. Yıldız (*) import içerisinden çağrılıyor olabilir; açıkça import edilmesi önerilir.", name);
+                } else {
+                    issue.severity = Some("ERROR".to_string());
+                }
+
+                issues.push(issue);
                 output.push_str(&format!("   {}. {}\n", i + 1, name));
             }
         } else {
@@ -296,14 +336,29 @@ fn analyze_single_file(file_path: &str) -> FileAnalysisResult {
         undefined_vars.retain(|(node, _)| should_report_error_for_node(node, &yapay_zeka_kodu));
         undefined_variables = undefined_vars.len();
         if !undefined_vars.is_empty() {
-            output.push_str(&format!("\n⚠️  Tanımlanmamış değişkenler: {} adet\n", undefined_vars.len()));
+            if file_has_wildcard {
+                output.push_str(&format!("\n⚠️  Potansiyel Tanımlanmamış Değişken (Yıldız Import Kaynaklı): {} adet\n", undefined_vars.len()));
+            } else {
+                output.push_str(&format!("\n⚠️  Tanımlanmamış değişkenler: {} adet\n", undefined_vars.len()));
+            }
+
             for (i, (node, name)) in undefined_vars.iter().enumerate() {
-                issues.push(issue_from_node(
+                let mut issue = issue_from_node(
                     node,
                     &yapay_zeka_kodu,
                     "Tanımsız Değişken",
                     format!("'{}' değişkeni kullanılmadan önce tanımlanmamış görünüyor.", name),
-                ));
+                );
+
+                if file_has_wildcard {
+                    issue.category = "Potansiyel Tanımlanmamış Değişken (Yıldız Import Kaynaklı)".to_string();
+                    issue.severity = Some("WARNING".to_string());
+                    issue.message = format!("'{}' yerelde tanımlanmamıştır. Yıldız (*) import içerisinden geliyor olabilir; açıkça tanımlanması veya import edilmesi önerilir.", name);
+                } else {
+                    issue.severity = Some("ERROR".to_string());
+                }
+
+                issues.push(issue);
                 output.push_str(&format!("   {}. {}\n", i + 1, name));
             }
         } else {
@@ -401,11 +456,21 @@ fn analyze_single_file(file_path: &str) -> FileAnalysisResult {
         output.push_str(&format!("Güvenlik İhlalleri        : {}\n", security_issues));
         output.push_str(&format!("Sonsuz Döngü Riskleri     : {}\n", infinite_loops));
         output.push_str("─────────────────────────────────\n");
-        let toplam_hata = syntax_errors + hallucinations + missing_imports + undefined_variables + unused_code + security_issues + infinite_loops;
-        output.push_str(&format!("Dosyadaki Toplam Sorun    : {}\n", toplam_hata));
     }
 
-    let toplam_hata = syntax_errors + hallucinations + missing_imports + undefined_variables + unused_code + security_issues + infinite_loops;
+    let toplam_hata = if file_has_wildcard {
+        syntax_errors + unused_code + security_issues + infinite_loops
+    } else {
+        syntax_errors
+            + hallucinations
+            + missing_imports
+            + undefined_variables
+            + unused_code
+            + security_issues
+            + infinite_loops
+    };
+
+    output.push_str(&format!("Dosyadaki Toplam Sorun    : {}\n", toplam_hata));
 
     FileAnalysisResult {
         file_path: file_path.to_string(),

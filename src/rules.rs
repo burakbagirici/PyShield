@@ -1,4 +1,5 @@
 use tree_sitter::{Node, Query, QueryCursor};
+use std::collections::HashSet;
 use std::sync::OnceLock;
 // HATA DÜZELTMESİ: tree-sitter üzerinden değil, doğrudan kendi kütüphanesinden çağırıyoruz
 use streaming_iterator::StreamingIterator;
@@ -19,8 +20,14 @@ static QUERY_ATTRIBUTES: OnceLock<Query> = OnceLock::new();
 static QUERY_ASSIGN_STRINGS: OnceLock<Query> = OnceLock::new();
 static QUERY_WHILE_LOOPS: OnceLock<Query> = OnceLock::new();
 static QUERY_DANGEROUS_EXECUTIONS: OnceLock<Query> = OnceLock::new();
+static BUILTIN_FUNCTIONS_SET: OnceLock<HashSet<&'static str>> = OnceLock::new();
+static KEYWORD_ARGUMENT_NAMES_SET: OnceLock<HashSet<&'static str>> = OnceLock::new();
+static PYTHON_KEYWORDS_SET: OnceLock<HashSet<&'static str>> = OnceLock::new();
 
+/// Python yerleşik (built-in) fonksiyonları, istisnalar ve özel nitelikleri
+/// Tanımsız değişken analizinden muaf tutulacak identifiers
 pub const BUILTIN_FUNCTIONS: &[&str] = &[
+    // Built-in fonksiyonlar
     "print", "len", "range", "input", "type", "str", "int", "float",
     "list", "dict", "set", "tuple", "bool", "isinstance", "hasattr",
     "getattr", "setattr", "open", "super", "enumerate", "zip", "map",
@@ -28,10 +35,68 @@ pub const BUILTIN_FUNCTIONS: &[&str] = &[
     "all", "id", "hash", "repr", "hex", "oct", "bin", "chr", "ord",
     "round", "format", "iter", "next", "vars", "dir", "help", "exit",
     "quit", "exec", "eval", "compile", "globals", "locals",
-    "staticmethod", "classmethod", "property", "object", "Exception",
-    "ValueError", "TypeError", "KeyError", "IndexError", "AttributeError",
-    "ImportError", "RuntimeError", "StopIteration", "NotImplementedError",
+    "staticmethod", "classmethod", "property", "object",
+    "callable", "complex", "slice", "divmod", "pow",
+    "bytes", "bytearray", "memoryview", "frozenset", "ascii",
+    
+    // Built-in istisnalar ve hata sınıfları
+    "Exception", "BaseException", "SystemExit", "KeyboardInterrupt",
+    "GeneratorExit", "StopIteration", "StopAsyncIteration",
+    "ArithmeticError", "FloatingPointError", "OverflowError",
+    "ZeroDivisionError", "AssertionError", "AttributeError",
+    "BufferError", "EOFError", "ImportError", "ModuleNotFoundError",
+    "LookupError", "IndexError", "KeyError", "MemoryError",
+    "NameError", "UnboundLocalError", "OSError", "BlockingIOError",
+    "ChildProcessError", "ConnectionError", "BrokenPipeError",
+    "ConnectionAbortedError", "ConnectionRefusedError", "ConnectionResetError",
+    "FileExistsError", "FileNotFoundError", "InterruptedError",
+    "IsADirectoryError", "NotADirectoryError", "PermissionError",
+    "ProcessLookupError", "TimeoutError", "ReferenceError",
+    "RuntimeError", "NotImplementedError", "RecursionError",
+    "SyntaxError", "IndentationError", "TabError", "SystemError",
+    "TypeError", "ValueError", "UnicodeError", "UnicodeDecodeError",
+    "UnicodeEncodeError", "UnicodeTranslateError", "Warning",
+    "DeprecationWarning", "PendingDeprecationWarning", "RuntimeWarning",
+    "SyntaxWarning", "UserWarning", "FutureWarning", "ImportWarning",
+    "UnicodeWarning", "BytesWarning", "ResourceWarning",
+    
+    // Özel/magic değişkenler
+    "__name__", "__file__", "__doc__", "__package__", "__loader__",
+    "__spec__", "__build_class__", "__import__", "__cached__",
+    "__path__", "__module__", "__dict__", "__slots__", "__weakref__",
+    "__class__", "__bases__", "__mro__", "__qualname__", "__annotations__",
+    
+    // Özel scope değişkenleri
+    "self", "cls",
 ];
+
+/// Keyword argument parametreleri (argparse ve diğer fonksiyonlarda sık rastlanır)
+/// Bu isimler fonksiyon çağrıları içinde tanımsız değişken olarak işaretlenmemeli
+pub const KEYWORD_ARGUMENT_NAMES: &[&str] = &[
+    "description", "metavar", "dest", "action", "required", "default",
+    "type", "choices", "nargs", "const", "help", "formatter_class",
+    "prefix_chars", "fromfile_prefix_chars", "argument_default",
+    "conflict_handler", "add_help", "name", "version", "kwargs",
+];
+
+const PYTHON_KEYWORDS: &[&str] = &[
+    "False", "None", "True", "and", "as", "assert", "async", "await", "break",
+    "class", "continue", "def", "del", "elif", "else", "except", "finally",
+    "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
+    "not", "or", "pass", "raise", "return", "try", "while", "with", "yield",
+];
+
+fn builtin_functions_set() -> &'static HashSet<&'static str> {
+    BUILTIN_FUNCTIONS_SET.get_or_init(|| BUILTIN_FUNCTIONS.iter().copied().collect())
+}
+
+fn keyword_argument_names_set() -> &'static HashSet<&'static str> {
+    KEYWORD_ARGUMENT_NAMES_SET.get_or_init(|| KEYWORD_ARGUMENT_NAMES.iter().copied().collect())
+}
+
+fn python_keywords_set() -> &'static HashSet<&'static str> {
+    PYTHON_KEYWORDS_SET.get_or_init(|| PYTHON_KEYWORDS.iter().copied().collect())
+}
 
 /// YARDIMCI FONKSIYON (Sorgu Optimizasyonu):
 /// Kodda çağrılan tüm fonksiyonları tek bir seferde bulur.
@@ -273,7 +338,7 @@ fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<
         }
     }
 
-    // Assignment'lar: x = 10
+    // Assignment'lar: x = 10 (BUT NOT keyword arguments: func(x=10))
     let assign_query = QUERY_ASSIGNMENTS.get_or_init(|| {
         Query::new(
             &tree_sitter_python::LANGUAGE.into(),
@@ -288,7 +353,10 @@ fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<
     while let Some(m) = matches.next() {
         for capture in m.captures {
             if let Ok(var_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                defined_vars.push(var_name);
+                // Keyword argument değilse ekle
+                if !is_keyword_argument(capture.node) {
+                    defined_vars.push(var_name);
+                }
             }
         }
     }
@@ -313,6 +381,33 @@ fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<
         }
     }
 
+    // Exception handler parametreleri: except ValueError as e:
+    // Tüm identifier'ları yakala ve except handler kontrol et  
+    let mut qc = QueryCursor::new();
+    let mut matches = qc.matches(id_query, root_node, source_code.as_bytes());
+
+    while let Some(m) = matches.next() {
+        for capture in m.captures {
+            if let Ok(name) = capture.node.utf8_text(source_code.as_bytes()) {
+                // Parent check: except clause altında mı?
+                let mut parent_opt = capture.node.parent();
+                
+                for _ in 0..5 {
+                    if let Some(parent) = parent_opt {
+                        if parent.kind() == "except_clause" {
+                            // Exception handler içindeki identifier tanımlı
+                            defined_vars.push(name);
+                            break;
+                        }
+                        parent_opt = parent.parent();
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     defined_vars
 }
 
@@ -332,21 +427,123 @@ fn is_inside_comprehension(node: Node) -> bool {
     false
 }
 
+/// Bir identifier'ın keyword argument içinde olup olmadığını kontrol eder.
+/// Örn: func(param_name="value") içindeki param_name keyword_argument node'u içinde olacak
+fn is_keyword_argument(node: Node) -> bool {
+    fn is_keyword_argument_parent_kind(kind: &str) -> bool {
+        kind == "keyword_argument"
+            || kind == "named_argument"
+            || kind == "keyword_parameter"
+            || kind == "default_parameter"
+            || (kind.contains("keyword") && kind.contains("argument"))
+    }
+
+    fn is_left_side_of_argument(parent: Node, node: Node) -> bool {
+        if let Some(name_node) = parent.child_by_field_name("name") {
+            if name_node.id() == node.id() {
+                return true;
+            }
+        }
+
+        if let Some(first_named_child) = parent.named_child(0) {
+            if first_named_child.id() == node.id() {
+                return true;
+            }
+        }
+
+        if let Some(first_child) = parent.child(0) {
+            if first_child.id() == node.id() {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    let mut current = node.parent();
+    while let Some(n) = current {
+        let kind = n.kind();
+        if is_keyword_argument_parent_kind(kind) {
+            return is_left_side_of_argument(n, node);
+        }
+
+        if matches!(kind, "call" | "argument_list" | "arguments" | "parenthesized_expression") {
+            current = n.parent();
+            continue;
+        }
+
+        current = n.parent();
+    }
+    false
+}
+
+/// Bir node'un decorator context'inde olup olmadığını kontrol eder.
+fn is_in_decorator(node: Node) -> bool {
+    let mut current = node.parent();
+    while let Some(n) = current {
+        if n.kind() == "decorator" {
+            return true;
+        }
+        // Sadece decorated_definition'a kadar çık
+        if n.kind() == "decorated_definition" {
+            return false;
+        }
+        current = n.parent();
+    }
+    false
+}
+
+/// Wildcard import (`from x import *`) olup olmadığını kontrol eder
+pub fn has_wildcard_import(root_node: Node) -> bool {
+    fn search_wildcard(node: Node) -> bool {
+        if node.kind() == "import_from_statement" {
+            let count = node.child_count();
+            for i in 0..count {
+                if let Some(child) = node.child(i) {
+                    if matches!(child.kind(), "*" | "import_star" | "wildcard_import") {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        let count = node.child_count();
+        for i in 0..count {
+            if let Some(child) = node.child(i) {
+                if search_wildcard(child) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    search_wildcard(root_node)
+}
+
 /// AKILLI KURAL 3 (İŞLEV):
 /// Kodda kullanılan tanımlanmamış değişkenleri bulur.
-/// Daha akıllı filtering ile false positive'leri azaltır.
-/// MÜKEMMELLEŞTİRME: hallucinated ve missing_imports listelerindeki isimler
-/// mükerrer raporlamayı önlemek için burada filtrelenir.
+/// Production-ready false positive filtreleme sistemi:
+/// - Built-in özel değişkenler, fonksiyonlar, istisnalar
+/// - Keyword argument'lar (func(param=value) içinde param)
+/// - Decorator context'i
+/// - self/cls scope yönetimi  
 pub fn find_undefined_variables<'a>(
     root_node: Node<'a>,
     source_code: &'a str,
     hallucinated: &[&'a str],
     missing_imports: &[&'a str],
 ) -> Vec<(Node<'a>, &'a str)> {
-    let defined = find_defined_variables(root_node, source_code);
+    let defined_vars = find_defined_variables(root_node, source_code);
+    let defined: HashSet<&str> = defined_vars.into_iter().collect();
+    let builtin_functions_lookup = builtin_functions_set();
+    let keyword_argument_names_lookup = keyword_argument_names_set();
+    let python_keywords_lookup = python_keywords_set();
 
     // Function definition names'ı topla (bunlar değişken değil)
-    let func_names = find_function_definitions(root_node, source_code);
+    let func_names_vec = find_function_definitions(root_node, source_code);
+    let func_names: HashSet<&str> = func_names_vec.into_iter().collect();
+    let hallucinated_names: HashSet<&str> = hallucinated.iter().copied().collect();
+    let missing_import_names: HashSet<&str> = missing_imports.iter().copied().collect();
 
     // Tüm identifier usageları: herhangi bir identifier context'te
     let usage_query = QUERY_IDENTIFIERS.get_or_init(|| {
@@ -365,15 +562,25 @@ pub fn find_undefined_variables<'a>(
     while let Some(m) = matches.next() {
         for capture in m.captures {
             if let Ok(var_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                // Comprehension içindeyse atla
+                // 1. Comprehension içindeyse atla
                 if is_inside_comprehension(capture.node) {
+                    continue;
+                }
+
+                // 2. Decorator context'inde ise atla
+                if is_in_decorator(capture.node) {
+                    continue;
+                }
+
+                // 3. Keyword argument olup olmadığını kontrol et
+                if is_keyword_argument(capture.node) {
                     continue;
                 }
 
                 // Node'un parent'ını kontrol et (import, function def, attribute vb)
                 let parent = capture.node.parent();
                 
-                // İlgisiz parent types'ını skip et
+                // 4. İlgisiz parent types'ını skip et
                 if let Some(p) = parent {
                     let parent_kind = p.kind();
                     
@@ -384,7 +591,7 @@ pub fn find_undefined_variables<'a>(
                     }
                     
                     // Function definition adı skip
-                    if parent_kind == "function_definition" {
+                    if parent_kind == "function_definition" || parent_kind == "class_definition" {
                         continue;
                     }
                     
@@ -399,22 +606,15 @@ pub fn find_undefined_variables<'a>(
                     }
                 }
 
-                // Eğer tanımlanmamışsa ve built-in değilse, undefined
-                if !defined.contains(&var_name) 
-                    && !BUILTIN_FUNCTIONS.contains(&var_name)
-                    && !func_names.contains(&var_name) {
-                    
-                    // Keywords'ü skip et
-                    if var_name != "def" && var_name != "for" && var_name != "in" 
-                        && var_name != "return" && var_name != "import" {
-
-                        // MÜKEMMELLEŞTİRME: Zaten halüsinasyon veya eksik import
-                        // olarak raporlandıysa, bu listeye ekleme (mükerrer önleme)
-                        if !hallucinated.contains(&var_name) 
-                            && !missing_imports.contains(&var_name) {
-                            undefined_vars.push((capture.node, var_name));
-                        }
-                    }
+                // 5. Eğer tanımlanmamışsa ve built-in değilse, undefined
+                if !defined.contains(var_name)
+                    && !builtin_functions_lookup.contains(var_name)
+                    && !keyword_argument_names_lookup.contains(var_name)
+                    && !func_names.contains(var_name)
+                    && !python_keywords_lookup.contains(var_name)
+                    && !hallucinated_names.contains(var_name)
+                    && !missing_import_names.contains(var_name) {
+                    undefined_vars.push((capture.node, var_name));
                 }
             }
         }
@@ -576,6 +776,8 @@ pub fn find_unused_code<'a, 'b>(
 /// AKILLI KURAL 4:
 /// Kodda noktalı notasyon ile kullanılan ama import edilmemiş kütüphaneleri bulur.
 /// Örn: math.sqrt() veya os.path - math ve os import edilmemişse hata.
+/// Wildcard import yönetimi: from x import * varsa, false positive'leri engelle
+/// Scope muafiyeti: self.attr ve cls.attr'leri skip et (dinamik attribute)
 pub fn find_missing_imports<'a>(
     root_node: Node<'a>,
     source_code: &'a str,
@@ -598,7 +800,13 @@ pub fn find_missing_imports<'a>(
     while let Some(m) = matches.next() {
         for capture in m.captures {
             if let Ok(lib_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                // Eğer library'nin adı import edilmemişse, bu eksik import
+                // self.attribute veya cls.attribute'ı skip et (dinamik scope)
+                if lib_name == "self" || lib_name == "cls" {
+                    continue;
+                }
+                
+                // Eğer library'nin adı import edilmemişse, bu eksik import.
+                // Wildcard import durumunda severity kararını raporlama katmanı verir.
                 if !imports.contains(&lib_name) {
                     missing.push((capture.node, lib_name));
                 }
