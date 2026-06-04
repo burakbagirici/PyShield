@@ -57,10 +57,7 @@ fn main() {
     println!("📊 GENEL ANALIZ ÖZETİ (PARALEL MOD)");
     println!("{}", "═".repeat(70));
     println!("✓ Taranılan dosya sayısı  : {}", report.total_files_scanned);
-    println!(
-        "⚠️  Toplam bulunan hata : {}",
-        report.total_errors_found
-    );
+    println!("⚠️  Toplam bulunan hata : {}", report.total_errors_found);
     println!("─────────────────────────────────────────────────────────────────");
 
     if report.total_errors_found == 0 {

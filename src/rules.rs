@@ -1,6 +1,6 @@
-use tree_sitter::{Node, Query, QueryCursor};
 use std::collections::HashSet;
 use std::sync::OnceLock;
+use tree_sitter::{Node, Query, QueryCursor};
 // HATA DÜZELTMESİ: tree-sitter üzerinden değil, doğrudan kendi kütüphanesinden çağırıyoruz
 use streaming_iterator::StreamingIterator;
 
@@ -9,9 +9,7 @@ use streaming_iterator::StreamingIterator;
 
 static QUERY_FUNC_CALLS: OnceLock<Query> = OnceLock::new();
 static QUERY_FUNC_DEFS: OnceLock<Query> = OnceLock::new();
-static QUERY_IMPORTS: OnceLock<Query> = OnceLock::new();
-static QUERY_FROM_IMPORTS: OnceLock<Query> = OnceLock::new();
-static QUERY_IMPORT_NAMES: OnceLock<Query> = OnceLock::new();
+static QUERY_CLASS_DEFS: OnceLock<Query> = OnceLock::new();
 static QUERY_PARAMS: OnceLock<Query> = OnceLock::new();
 static QUERY_ASSIGNMENTS: OnceLock<Query> = OnceLock::new();
 static QUERY_FOR_LOOPS: OnceLock<Query> = OnceLock::new();
@@ -28,63 +26,203 @@ static PYTHON_KEYWORDS_SET: OnceLock<HashSet<&'static str>> = OnceLock::new();
 /// Tanımsız değişken analizinden muaf tutulacak identifiers
 pub const BUILTIN_FUNCTIONS: &[&str] = &[
     // Built-in fonksiyonlar
-    "print", "len", "range", "input", "type", "str", "int", "float",
-    "list", "dict", "set", "tuple", "bool", "isinstance", "hasattr",
-    "getattr", "setattr", "open", "super", "enumerate", "zip", "map",
-    "filter", "sorted", "reversed", "abs", "max", "min", "sum", "any",
-    "all", "id", "hash", "repr", "hex", "oct", "bin", "chr", "ord",
-    "round", "format", "iter", "next", "vars", "dir", "help", "exit",
-    "quit", "exec", "eval", "compile", "globals", "locals",
-    "staticmethod", "classmethod", "property", "object",
-    "callable", "complex", "slice", "divmod", "pow",
-    "bytes", "bytearray", "memoryview", "frozenset", "ascii",
-    
+    "print",
+    "len",
+    "range",
+    "input",
+    "type",
+    "str",
+    "int",
+    "float",
+    "list",
+    "dict",
+    "set",
+    "tuple",
+    "bool",
+    "isinstance",
+    "hasattr",
+    "getattr",
+    "setattr",
+    "open",
+    "super",
+    "enumerate",
+    "zip",
+    "map",
+    "filter",
+    "sorted",
+    "reversed",
+    "abs",
+    "max",
+    "min",
+    "sum",
+    "any",
+    "all",
+    "id",
+    "hash",
+    "repr",
+    "hex",
+    "oct",
+    "bin",
+    "chr",
+    "ord",
+    "round",
+    "format",
+    "iter",
+    "next",
+    "vars",
+    "dir",
+    "help",
+    "exit",
+    "quit",
+    "exec",
+    "eval",
+    "compile",
+    "globals",
+    "locals",
+    "staticmethod",
+    "classmethod",
+    "property",
+    "object",
+    "callable",
+    "complex",
+    "slice",
+    "divmod",
+    "pow",
+    "bytes",
+    "bytearray",
+    "memoryview",
+    "frozenset",
+    "ascii",
     // Built-in istisnalar ve hata sınıfları
-    "Exception", "BaseException", "SystemExit", "KeyboardInterrupt",
-    "GeneratorExit", "StopIteration", "StopAsyncIteration",
-    "ArithmeticError", "FloatingPointError", "OverflowError",
-    "ZeroDivisionError", "AssertionError", "AttributeError",
-    "BufferError", "EOFError", "ImportError", "ModuleNotFoundError",
-    "LookupError", "IndexError", "KeyError", "MemoryError",
-    "NameError", "UnboundLocalError", "OSError", "BlockingIOError",
-    "ChildProcessError", "ConnectionError", "BrokenPipeError",
-    "ConnectionAbortedError", "ConnectionRefusedError", "ConnectionResetError",
-    "FileExistsError", "FileNotFoundError", "InterruptedError",
-    "IsADirectoryError", "NotADirectoryError", "PermissionError",
-    "ProcessLookupError", "TimeoutError", "ReferenceError",
-    "RuntimeError", "NotImplementedError", "RecursionError",
-    "SyntaxError", "IndentationError", "TabError", "SystemError",
-    "TypeError", "ValueError", "UnicodeError", "UnicodeDecodeError",
-    "UnicodeEncodeError", "UnicodeTranslateError", "Warning",
-    "DeprecationWarning", "PendingDeprecationWarning", "RuntimeWarning",
-    "SyntaxWarning", "UserWarning", "FutureWarning", "ImportWarning",
-    "UnicodeWarning", "BytesWarning", "ResourceWarning",
-    
+    "Exception",
+    "BaseException",
+    "SystemExit",
+    "KeyboardInterrupt",
+    "GeneratorExit",
+    "StopIteration",
+    "StopAsyncIteration",
+    "ArithmeticError",
+    "FloatingPointError",
+    "OverflowError",
+    "ZeroDivisionError",
+    "AssertionError",
+    "AttributeError",
+    "BufferError",
+    "EOFError",
+    "ImportError",
+    "ModuleNotFoundError",
+    "LookupError",
+    "IndexError",
+    "KeyError",
+    "MemoryError",
+    "NameError",
+    "UnboundLocalError",
+    "OSError",
+    "BlockingIOError",
+    "ChildProcessError",
+    "ConnectionError",
+    "BrokenPipeError",
+    "ConnectionAbortedError",
+    "ConnectionRefusedError",
+    "ConnectionResetError",
+    "FileExistsError",
+    "FileNotFoundError",
+    "InterruptedError",
+    "IsADirectoryError",
+    "NotADirectoryError",
+    "PermissionError",
+    "ProcessLookupError",
+    "TimeoutError",
+    "ReferenceError",
+    "RuntimeError",
+    "NotImplementedError",
+    "RecursionError",
+    "SyntaxError",
+    "IndentationError",
+    "TabError",
+    "SystemError",
+    "TypeError",
+    "ValueError",
+    "UnicodeError",
+    "UnicodeDecodeError",
+    "UnicodeEncodeError",
+    "UnicodeTranslateError",
+    "Warning",
+    "DeprecationWarning",
+    "PendingDeprecationWarning",
+    "RuntimeWarning",
+    "SyntaxWarning",
+    "UserWarning",
+    "FutureWarning",
+    "ImportWarning",
+    "UnicodeWarning",
+    "BytesWarning",
+    "ResourceWarning",
     // Özel/magic değişkenler
-    "__name__", "__file__", "__doc__", "__package__", "__loader__",
-    "__spec__", "__build_class__", "__import__", "__cached__",
-    "__path__", "__module__", "__dict__", "__slots__", "__weakref__",
-    "__class__", "__bases__", "__mro__", "__qualname__", "__annotations__",
-    
+    "__name__",
+    "__file__",
+    "__doc__",
+    "__package__",
+    "__loader__",
+    "__spec__",
+    "__build_class__",
+    "__import__",
+    "__cached__",
+    "__path__",
+    "__module__",
+    "__dict__",
+    "__slots__",
+    "__weakref__",
+    "__class__",
+    "__bases__",
+    "__mro__",
+    "__qualname__",
+    "__annotations__",
     // Özel scope değişkenleri
-    "self", "cls",
+    "self",
+    "cls",
 ];
 
 /// Keyword argument parametreleri (argparse ve diğer fonksiyonlarda sık rastlanır)
 /// Bu isimler fonksiyon çağrıları içinde tanımsız değişken olarak işaretlenmemeli
 pub const KEYWORD_ARGUMENT_NAMES: &[&str] = &[
-    "description", "metavar", "dest", "action", "required", "default",
-    "type", "choices", "nargs", "const", "help", "formatter_class",
-    "prefix_chars", "fromfile_prefix_chars", "argument_default",
-    "conflict_handler", "add_help", "name", "version", "kwargs",
+    "description",
+    "metavar",
+    "dest",
+    "action",
+    "required",
+    "default",
+    "type",
+    "choices",
+    "nargs",
+    "const",
+    "help",
+    "formatter_class",
+    "prefix_chars",
+    "fromfile_prefix_chars",
+    "argument_default",
+    "conflict_handler",
+    "add_help",
+    "name",
+    "version",
+    "kwargs",
 ];
 
 const PYTHON_KEYWORDS: &[&str] = &[
-    "False", "None", "True", "and", "as", "assert", "async", "await", "break",
-    "class", "continue", "def", "del", "elif", "else", "except", "finally",
-    "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
-    "not", "or", "pass", "raise", "return", "try", "while", "with", "yield",
+    "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue",
+    "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import",
+    "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while",
+    "with", "yield",
 ];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ImportSymbol<'a> {
+    pub module: &'a str,
+    pub imported_name: &'a str,
+    pub local_name: &'a str,
+    pub is_wildcard: bool,
+    pub line: usize,
+}
 
 fn builtin_functions_set() -> &'static HashSet<&'static str> {
     BUILTIN_FUNCTIONS_SET.get_or_init(|| BUILTIN_FUNCTIONS.iter().copied().collect())
@@ -142,7 +280,7 @@ pub fn find_function_definitions<'a>(root_node: Node<'a>, source_code: &'a str) 
 
     let mut query_cursor = QueryCursor::new();
     let mut matches = query_cursor.matches(query, root_node, source_code.as_bytes());
-    
+
     let mut defined_functions = Vec::new();
 
     while let Some(m) = matches.next() {
@@ -154,6 +292,31 @@ pub fn find_function_definitions<'a>(root_node: Node<'a>, source_code: &'a str) 
     }
 
     defined_functions
+}
+
+pub fn find_class_definitions<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<&'a str> {
+    let query = QUERY_CLASS_DEFS.get_or_init(|| {
+        Query::new(
+            &tree_sitter_python::LANGUAGE.into(),
+            "(class_definition name: (identifier) @class_name)",
+        )
+        .expect("Class tanımı sorgusu derlenirken hata oluştu!")
+    });
+
+    let mut query_cursor = QueryCursor::new();
+    let mut matches = query_cursor.matches(query, root_node, source_code.as_bytes());
+
+    let mut defined_classes = Vec::new();
+
+    while let Some(m) = matches.next() {
+        for capture in m.captures {
+            if let Ok(class_name) = capture.node.utf8_text(source_code.as_bytes()) {
+                defined_classes.push(class_name);
+            }
+        }
+    }
+
+    defined_classes
 }
 
 /// TEMEL KURAL:
@@ -199,47 +362,153 @@ pub fn format_syntax_error(node: &Node) -> String {
     }
 }
 
-/// AKILLI KURAL 3:
-/// Kodda import edilen tüm kütüphaneleri bulur.
-pub fn find_all_imports<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<&'a str> {
-    let mut imports = Vec::new();
-
-    // Basit import'ları tara
-    let import_query = QUERY_IMPORTS.get_or_init(|| {
-        Query::new(
-            &tree_sitter_python::LANGUAGE.into(),
-            "(import_statement name: (dotted_name (identifier) @import_name))",
-        )
-        .expect("Import sorgusu derlenirken hata oluştu!")
-    });
-
-    let mut query_cursor = QueryCursor::new();
-    let mut matches = query_cursor.matches(import_query, root_node, source_code.as_bytes());
-
-    while let Some(m) = matches.next() {
-        for capture in m.captures {
-            if let Ok(import_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                imports.push(import_name);
-            }
-        }
+fn collect_nodes_by_kind<'a>(node: Node<'a>, kind: &str, out: &mut Vec<Node<'a>>) {
+    if node.kind() == kind {
+        out.push(node);
     }
 
-    // from ... import ... yapısını tara
-    let from_query = QUERY_FROM_IMPORTS.get_or_init(|| {
-        Query::new(
-            &tree_sitter_python::LANGUAGE.into(),
-            "(import_from_statement module_name: (dotted_name (identifier) @module_name))",
-        )
-        .expect("From-import sorgusu derlenirken hata oluştu!")
-    });
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            collect_nodes_by_kind(child, kind, out);
+        }
+    }
+}
 
-    let mut query_cursor = QueryCursor::new();
-    let mut matches = query_cursor.matches(from_query, root_node, source_code.as_bytes());
+fn strip_comment(text: &str) -> &str {
+    text.split('#').next().unwrap_or(text).trim()
+}
 
-    while let Some(m) = matches.next() {
-        for capture in m.captures {
-            if let Ok(module_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                imports.push(module_name);
+fn split_import_items(text: &str) -> Vec<&str> {
+    text.trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .split(',')
+        .map(strip_comment)
+        .filter(|item| !item.is_empty())
+        .collect()
+}
+
+fn split_alias(text: &str) -> (&str, &str) {
+    let cleaned = strip_comment(text);
+    let parts: Vec<&str> = cleaned.split_whitespace().collect();
+    if parts.len() == 3 && parts[1].eq_ignore_ascii_case("as") {
+        (parts[0].trim(), parts[2].trim())
+    } else {
+        (cleaned, cleaned)
+    }
+}
+
+fn first_dotted_segment(text: &str) -> &str {
+    text.split('.').next().unwrap_or(text).trim()
+}
+
+fn last_dotted_segment(text: &str) -> &str {
+    text.rsplit('.').next().unwrap_or(text).trim()
+}
+
+fn parse_import_statement<'a>(text: &'a str, line: usize, imports: &mut Vec<ImportSymbol<'a>>) {
+    let trimmed = text.trim_start();
+    let Some(rest) = trimmed.strip_prefix("import") else {
+        return;
+    };
+
+    for item in split_import_items(rest) {
+        let (module_name, alias_or_name) = split_alias(item);
+        let local_name = if alias_or_name == module_name {
+            first_dotted_segment(module_name)
+        } else {
+            alias_or_name
+        };
+
+        if !module_name.is_empty() && !local_name.is_empty() {
+            imports.push(ImportSymbol {
+                module: module_name,
+                imported_name: module_name,
+                local_name,
+                is_wildcard: false,
+                line,
+            });
+        }
+    }
+}
+
+fn parse_from_import_statement<'a>(
+    text: &'a str,
+    line: usize,
+    imports: &mut Vec<ImportSymbol<'a>>,
+) {
+    let trimmed = text.trim_start();
+    let Some(rest) = trimmed.strip_prefix("from") else {
+        return;
+    };
+
+    let rest = rest.trim_start();
+    let Some(import_idx) = rest.find(" import") else {
+        return;
+    };
+
+    let module_name = rest[..import_idx].trim();
+    let imported_part = rest[import_idx + " import".len()..].trim();
+    if imported_part == "*" {
+        imports.push(ImportSymbol {
+            module: module_name,
+            imported_name: "*",
+            local_name: "*",
+            is_wildcard: true,
+            line,
+        });
+        return;
+    }
+
+    for item in split_import_items(imported_part) {
+        if item == "*" {
+            imports.push(ImportSymbol {
+                module: module_name,
+                imported_name: "*",
+                local_name: "*",
+                is_wildcard: true,
+                line,
+            });
+            continue;
+        }
+
+        let (imported_name, alias_or_name) = split_alias(item);
+        let local_name = if alias_or_name == imported_name {
+            last_dotted_segment(imported_name)
+        } else {
+            alias_or_name
+        };
+
+        if !imported_name.is_empty() && !local_name.is_empty() {
+            imports.push(ImportSymbol {
+                module: module_name,
+                imported_name,
+                local_name,
+                is_wildcard: false,
+                line,
+            });
+        }
+    }
+}
+
+pub fn collect_import_symbols<'a>(
+    root_node: Node<'a>,
+    source_code: &'a str,
+) -> Vec<ImportSymbol<'a>> {
+    let mut import_nodes = Vec::new();
+    collect_nodes_by_kind(root_node, "import_statement", &mut import_nodes);
+    collect_nodes_by_kind(root_node, "import_from_statement", &mut import_nodes);
+
+    import_nodes.sort_by_key(|node| node.start_byte());
+
+    let mut imports = Vec::new();
+    for node in import_nodes {
+        if let Ok(text) = node.utf8_text(source_code.as_bytes()) {
+            let line = node.start_position().row + 1;
+            match node.kind() {
+                "import_statement" => parse_import_statement(text, line, &mut imports),
+                "import_from_statement" => parse_from_import_statement(text, line, &mut imports),
+                _ => {}
             }
         }
     }
@@ -247,84 +516,164 @@ pub fn find_all_imports<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<&'
     imports
 }
 
+/// AKILLI KURAL 3:
+/// Kodda import edilen tüm kütüphaneleri bulur.
+pub fn find_all_imports<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<&'a str> {
+    let mut seen = HashSet::new();
+    collect_import_symbols(root_node, source_code)
+        .into_iter()
+        .filter(|symbol| !symbol.is_wildcard)
+        .filter_map(|symbol| {
+            if seen.insert(symbol.local_name) {
+                Some(symbol.local_name)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn collect_binding_identifiers<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
+    match node.kind() {
+        "identifier" => out.push(node),
+        "attribute" | "subscript" => return,
+        _ => {
+            for i in 0..node.named_child_count() {
+                if let Some(child) = node.named_child(i) {
+                    collect_binding_identifiers(child, out);
+                }
+            }
+        }
+    }
+}
+
+fn collect_parameter_identifiers<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
+    if node.kind() == "identifier" {
+        out.push(node);
+        return;
+    }
+
+    if let Some(name_node) = node.child_by_field_name("name") {
+        collect_binding_identifiers(name_node, out);
+        return;
+    }
+
+    if let Some(pattern_node) = node.child_by_field_name("pattern") {
+        collect_binding_identifiers(pattern_node, out);
+        return;
+    }
+
+    if matches!(
+        node.kind(),
+        "typed_parameter"
+            | "default_parameter"
+            | "typed_default_parameter"
+            | "list_splat_pattern"
+            | "dictionary_splat_pattern"
+            | "keyword_separator"
+    ) {
+        if let Some(first_named_child) = node.named_child(0) {
+            collect_binding_identifiers(first_named_child, out);
+        }
+        return;
+    }
+
+    for i in 0..node.named_child_count() {
+        if let Some(child) = node.named_child(i) {
+            collect_parameter_identifiers(child, out);
+        }
+    }
+}
+
+fn collect_with_aliases<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<&'a str> {
+    let mut with_nodes = Vec::new();
+    collect_nodes_by_kind(root_node, "with_statement", &mut with_nodes);
+
+    let mut aliases = Vec::new();
+    for node in with_nodes {
+        let Ok(text) = node.utf8_text(source_code.as_bytes()) else {
+            continue;
+        };
+        let Some(header) = text.split(':').next() else {
+            continue;
+        };
+        let Some(rest) = header.trim_start().strip_prefix("with") else {
+            continue;
+        };
+
+        for item in split_import_items(rest) {
+            let parts: Vec<&str> = item.split_whitespace().collect();
+            if parts.len() >= 3 {
+                for idx in 0..parts.len().saturating_sub(1) {
+                    if parts[idx].eq_ignore_ascii_case("as") {
+                        let alias = parts[idx + 1]
+                            .trim()
+                            .trim_start_matches('(')
+                            .trim_end_matches(')')
+                            .trim_end_matches(':');
+                        if !alias.is_empty() {
+                            aliases.push(alias);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    aliases
+}
+
+fn has_ancestor_kind(node: Node, kinds: &[&str]) -> bool {
+    let mut current = node.parent();
+    while let Some(parent) = current {
+        if kinds.contains(&parent.kind()) {
+            return true;
+        }
+        current = parent.parent();
+    }
+    false
+}
+
+fn is_class_scope_binding(node: Node) -> bool {
+    let mut current = node.parent();
+    while let Some(parent) = current {
+        match parent.kind() {
+            "function_definition" | "lambda" => return false,
+            "class_definition" => return true,
+            _ => current = parent.parent(),
+        }
+    }
+    false
+}
+
 /// AKILLI KURAL 3 (DEVAM):
 /// Kodda tanımlanan tüm değişkenleri bulur (parametreler, assignmentlar, loop vars, imports).
 fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<&'a str> {
     let mut defined_vars = Vec::new();
 
-    // Import statement'larında tanımlanan modüller: import os, import sys
-    let import_query = QUERY_IMPORT_NAMES.get_or_init(|| {
-        Query::new(
-            &tree_sitter_python::LANGUAGE.into(),
-            "(import_statement name: (dotted_name (identifier) @import_name))",
-        )
-        .expect("Import names sorgusu derlenirken hata oluştu!")
-    });
-
-    let mut qc = QueryCursor::new();
-    let mut matches = qc.matches(import_query, root_node, source_code.as_bytes());
-
-    while let Some(m) = matches.next() {
-        for capture in m.captures {
-            if let Ok(import_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                defined_vars.push(import_name);
-            }
+    for import in collect_import_symbols(root_node, source_code) {
+        if !import.is_wildcard {
+            defined_vars.push(import.local_name);
         }
     }
 
-    // from ... import ... yapısı: from os import path => path tanımlanır
-    // Tüm identifier'ları yakala ve parent kontrol et
+    for alias in collect_with_aliases(root_node, source_code) {
+        defined_vars.push(alias);
+    }
+
+    for class_name in find_class_definitions(root_node, source_code) {
+        defined_vars.push(class_name);
+    }
+
     let id_query = QUERY_IDENTIFIERS.get_or_init(|| {
-        Query::new(
-            &tree_sitter_python::LANGUAGE.into(),
-            "(identifier) @id",
-        )
-        .expect("Identifiers sorgusu derlenirken hata oluştu!")
+        Query::new(&tree_sitter_python::LANGUAGE.into(), "(identifier) @id")
+            .expect("Identifiers sorgusu derlenirken hata oluştu!")
     });
-
-    let mut qc = QueryCursor::new();
-    let mut matches = qc.matches(id_query, root_node, source_code.as_bytes());
-
-    while let Some(m) = matches.next() {
-        for capture in m.captures {
-            if let Ok(name) = capture.node.utf8_text(source_code.as_bytes()) {
-                // Parent check: import_from_statement altında mı?
-                let mut parent_opt = capture.node.parent();
-                let mut found = false;
-                
-                // Maximum 3 level up çık (parent -> grandparent -> great-grandparent)
-                for _ in 0..3 {
-                    if let Some(parent) = parent_opt {
-                        if parent.kind() == "import_from_statement" {
-                            // from ... import ... inside, ekle
-                            found = true;
-                            break;
-                        }
-                        // Kısa circuit: import statement ise this is regular import, çık
-                        if parent.kind() == "import_statement" || parent.kind() == "dotted_name" {
-                            break;
-                        }
-                        parent_opt = parent.parent();
-                    } else {
-                        break;
-                    }
-                }
-                
-                if found {
-                    defined_vars.push(name);
-                }
-            }
-        }
-    }
-
 
     // Fonksiyon parametreleri: def func(x, y, z)
     let param_query = QUERY_PARAMS.get_or_init(|| {
-        Query::new(
-            &tree_sitter_python::LANGUAGE.into(),
-            "(parameters (identifier) @param)",
-        )
-        .expect("Params sorgusu derlenirken hata oluştu!")
+        Query::new(&tree_sitter_python::LANGUAGE.into(), "(parameters) @params")
+            .expect("Params sorgusu derlenirken hata oluştu!")
     });
 
     let mut qc = QueryCursor::new();
@@ -332,8 +681,12 @@ fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<
 
     while let Some(m) = matches.next() {
         for capture in m.captures {
-            if let Ok(param_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                defined_vars.push(param_name);
+            let mut param_nodes = Vec::new();
+            collect_parameter_identifiers(capture.node, &mut param_nodes);
+            for param_node in param_nodes {
+                if let Ok(param_name) = param_node.utf8_text(source_code.as_bytes()) {
+                    defined_vars.push(param_name);
+                }
             }
         }
     }
@@ -342,7 +695,7 @@ fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<
     let assign_query = QUERY_ASSIGNMENTS.get_or_init(|| {
         Query::new(
             &tree_sitter_python::LANGUAGE.into(),
-            "(assignment left: (identifier) @lhs)",
+            "(assignment left: (_) @lhs)",
         )
         .expect("Assignments sorgusu derlenirken hata oluştu!")
     });
@@ -352,10 +705,13 @@ fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<
 
     while let Some(m) = matches.next() {
         for capture in m.captures {
-            if let Ok(var_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                // Keyword argument değilse ekle
-                if !is_keyword_argument(capture.node) {
-                    defined_vars.push(var_name);
+            let mut binding_nodes = Vec::new();
+            collect_binding_identifiers(capture.node, &mut binding_nodes);
+            for binding_node in binding_nodes {
+                if let Ok(var_name) = binding_node.utf8_text(source_code.as_bytes()) {
+                    if !is_keyword_argument(binding_node) {
+                        defined_vars.push(var_name);
+                    }
                 }
             }
         }
@@ -365,7 +721,7 @@ fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<
     let for_query = QUERY_FOR_LOOPS.get_or_init(|| {
         Query::new(
             &tree_sitter_python::LANGUAGE.into(),
-            "(for_statement left: (identifier) @loop_var)",
+            "(for_statement left: (_) @loop_var)",
         )
         .expect("For loops sorgusu derlenirken hata oluştu!")
     });
@@ -375,14 +731,18 @@ fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<
 
     while let Some(m) = matches.next() {
         for capture in m.captures {
-            if let Ok(loop_var) = capture.node.utf8_text(source_code.as_bytes()) {
-                defined_vars.push(loop_var);
+            let mut binding_nodes = Vec::new();
+            collect_binding_identifiers(capture.node, &mut binding_nodes);
+            for binding_node in binding_nodes {
+                if let Ok(loop_var) = binding_node.utf8_text(source_code.as_bytes()) {
+                    defined_vars.push(loop_var);
+                }
             }
         }
     }
 
     // Exception handler parametreleri: except ValueError as e:
-    // Tüm identifier'ları yakala ve except handler kontrol et  
+    // Tüm identifier'ları yakala ve except handler kontrol et
     let mut qc = QueryCursor::new();
     let mut matches = qc.matches(id_query, root_node, source_code.as_bytes());
 
@@ -391,7 +751,7 @@ fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<
             if let Ok(name) = capture.node.utf8_text(source_code.as_bytes()) {
                 // Parent check: except clause altında mı?
                 let mut parent_opt = capture.node.parent();
-                
+
                 for _ in 0..5 {
                     if let Some(parent) = parent_opt {
                         if parent.kind() == "except_clause" {
@@ -467,7 +827,10 @@ fn is_keyword_argument(node: Node) -> bool {
             return is_left_side_of_argument(n, node);
         }
 
-        if matches!(kind, "call" | "argument_list" | "arguments" | "parenthesized_expression") {
+        if matches!(
+            kind,
+            "call" | "argument_list" | "arguments" | "parenthesized_expression"
+        ) {
             current = n.parent();
             continue;
         }
@@ -547,13 +910,10 @@ pub fn find_undefined_variables<'a>(
 
     // Tüm identifier usageları: herhangi bir identifier context'te
     let usage_query = QUERY_IDENTIFIERS.get_or_init(|| {
-        Query::new(
-            &tree_sitter_python::LANGUAGE.into(),
-            "(identifier) @id",
-        )
-        .expect("Identifiers sorgusu derlenirken hata oluştu!")
+        Query::new(&tree_sitter_python::LANGUAGE.into(), "(identifier) @id")
+            .expect("Identifiers sorgusu derlenirken hata oluştu!")
     });
-    
+
     let mut undefined_vars = Vec::new();
 
     let mut query_cursor = QueryCursor::new();
@@ -579,22 +939,24 @@ pub fn find_undefined_variables<'a>(
 
                 // Node'un parent'ını kontrol et (import, function def, attribute vb)
                 let parent = capture.node.parent();
-                
+
                 // 4. İlgisiz parent types'ını skip et
                 if let Some(p) = parent {
                     let parent_kind = p.kind();
-                    
+
                     // Import statement içindeki identifiers skip
-                    if parent_kind == "import_statement" || parent_kind == "import_from_statement" 
-                        || parent_kind == "dotted_name" {
+                    if parent_kind == "import_statement"
+                        || parent_kind == "import_from_statement"
+                        || parent_kind == "dotted_name"
+                    {
                         continue;
                     }
-                    
+
                     // Function definition adı skip
                     if parent_kind == "function_definition" || parent_kind == "class_definition" {
                         continue;
                     }
-                    
+
                     // Attribute'un attribute adı kısmı skip (sağ taraf)
                     if parent_kind == "attribute" {
                         // Eğer parent'ın attribute field'i bu node'u contain ediyorsa skip
@@ -613,7 +975,8 @@ pub fn find_undefined_variables<'a>(
                     && !func_names.contains(var_name)
                     && !python_keywords_lookup.contains(var_name)
                     && !hallucinated_names.contains(var_name)
-                    && !missing_import_names.contains(var_name) {
+                    && !missing_import_names.contains(var_name)
+                {
                     undefined_vars.push((capture.node, var_name));
                 }
             }
@@ -626,22 +989,19 @@ pub fn find_undefined_variables<'a>(
 /// KURAL 5: Kullanılmayan Kod Tespiti (Unused Code Detector)
 /// Tanımlanmış ama hiç kullanılmayan import'ları ve değişkenleri bulur.
 /// Dönen tuple: (ad &str, satır numarası usize, kategori &str)
-pub fn find_unused_code<'a, 'b>(
+pub fn find_unused_code<'a>(
     root_node: Node<'a>,
-    source_code: &'b str,
-) -> Vec<(&'b str, usize, &'static str)> {
+    source_code: &'a str,
+) -> Vec<(&'a str, usize, &'static str)> {
     let mut unused = Vec::new();
 
     // --- Kullanılan tüm identifier'ları topla ---
     // (Sadece "kullanım" context'lerinden: atama solu değil, import tanımı değil)
-    let mut used_names: Vec<&'b str> = Vec::new();
+    let mut used_names: Vec<&'a str> = Vec::new();
 
     let id_query = QUERY_IDENTIFIERS.get_or_init(|| {
-        Query::new(
-            &tree_sitter_python::LANGUAGE.into(),
-            "(identifier) @id",
-        )
-        .expect("Identifiers sorgusu derlenirken hata oluştu!")
+        Query::new(&tree_sitter_python::LANGUAGE.into(), "(identifier) @id")
+            .expect("Identifiers sorgusu derlenirken hata oluştu!")
     });
 
     let mut qc = QueryCursor::new();
@@ -649,6 +1009,10 @@ pub fn find_unused_code<'a, 'b>(
     while let Some(m) = matches.next() {
         for capture in m.captures {
             if let Ok(name) = capture.node.utf8_text(source_code.as_bytes()) {
+                if has_ancestor_kind(capture.node, &["import_statement", "import_from_statement"]) {
+                    continue;
+                }
+
                 let parent = capture.node.parent();
                 if let Some(p) = parent {
                     let pk = p.kind();
@@ -675,71 +1039,12 @@ pub fn find_unused_code<'a, 'b>(
     }
 
     // --- 1. Kullanılmayan import'lar ---
-    // import os  -> os hiç kullanılmıyor mu?
-    let import_query = QUERY_IMPORTS.get_or_init(|| {
-        Query::new(
-            &tree_sitter_python::LANGUAGE.into(),
-            "(import_statement name: (dotted_name (identifier) @import_name))",
-        )
-        .expect("Import sorgusu derlenirken hata oluştu!")
-    });
-
-    let mut qc = QueryCursor::new();
-    let mut matches = qc.matches(import_query, root_node, source_code.as_bytes());
-    while let Some(m) = matches.next() {
-        for capture in m.captures {
-            if let Ok(imp_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                let row = capture.node.start_position().row + 1;
-                if !used_names.contains(&imp_name) {
-                    unused.push((imp_name, row, "import"));
-                }
-            }
+    for import in collect_import_symbols(root_node, source_code) {
+        if import.is_wildcard {
+            continue;
         }
-    }
-
-    // from os import path -> path hiç kullanılmıyor mu?
-    // Tüm identifier'ları yakala ve parent kontrol et
-    let id_query2 = QUERY_IDENTIFIERS.get_or_init(|| {
-        Query::new(
-            &tree_sitter_python::LANGUAGE.into(),
-            "(identifier) @id",
-        )
-        .expect("Identifiers sorgusu derlenirken hata oluştu!")
-    });
-
-    let mut qc = QueryCursor::new();
-    let mut matches = qc.matches(id_query2, root_node, source_code.as_bytes());
-
-    while let Some(m) = matches.next() {
-        for capture in m.captures {
-            if let Ok(name) = capture.node.utf8_text(source_code.as_bytes()) {
-                // Parent check: import_from_statement altında mı?
-                let mut parent_opt = capture.node.parent();
-                let mut found = false;
-                
-                // Maximum 3 level up çık
-                for _ in 0..3 {
-                    if let Some(parent) = parent_opt {
-                        if parent.kind() == "import_from_statement" {
-                            found = true;
-                            break;
-                        }
-                        if parent.kind() == "import_statement" || parent.kind() == "dotted_name" {
-                            break;
-                        }
-                        parent_opt = parent.parent();
-                    } else {
-                        break;
-                    }
-                }
-                
-                if found {
-                    let row = capture.node.start_position().row + 1;
-                    if !used_names.contains(&name) {
-                        unused.push((name, row, "import"));
-                    }
-                }
-            }
+        if !used_names.contains(&import.local_name) {
+            unused.push((import.local_name, import.line, "import"));
         }
     }
 
@@ -757,14 +1062,21 @@ pub fn find_unused_code<'a, 'b>(
     let mut matches = qc.matches(assign_query, root_node, source_code.as_bytes());
     while let Some(m) = matches.next() {
         for capture in m.captures {
-            if let Ok(var_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                let row = capture.node.start_position().row + 1;
-                // "_" ile başlayanlar (konvansiyonel olarak kasıtlı unused)
-                if var_name.starts_with('_') {
+            let mut binding_nodes = Vec::new();
+            collect_binding_identifiers(capture.node, &mut binding_nodes);
+            for binding_node in binding_nodes {
+                if is_class_scope_binding(binding_node) {
                     continue;
                 }
-                if !used_names.contains(&var_name) {
-                    unused.push((var_name, row, "değişken"));
+                if let Ok(var_name) = binding_node.utf8_text(source_code.as_bytes()) {
+                    let row = binding_node.start_position().row + 1;
+                    // "_" ile başlayanlar (konvansiyonel olarak kasıtlı unused)
+                    if var_name.starts_with('_') {
+                        continue;
+                    }
+                    if !used_names.contains(&var_name) {
+                        unused.push((var_name, row, "değişken"));
+                    }
                 }
             }
         }
@@ -783,6 +1095,10 @@ pub fn find_missing_imports<'a>(
     source_code: &'a str,
     imports: &[&'a str],
 ) -> Vec<(Node<'a>, &'a str)> {
+    let defined_vars = find_defined_variables(root_node, source_code);
+    let defined: HashSet<&str> = defined_vars.into_iter().collect();
+    let builtin_functions_lookup = builtin_functions_set();
+
     // Attribute access: obj.attr pattern'ı
     let attr_query = QUERY_ATTRIBUTES.get_or_init(|| {
         Query::new(
@@ -804,7 +1120,11 @@ pub fn find_missing_imports<'a>(
                 if lib_name == "self" || lib_name == "cls" {
                     continue;
                 }
-                
+
+                if defined.contains(lib_name) || builtin_functions_lookup.contains(lib_name) {
+                    continue;
+                }
+
                 // Eğer library'nin adı import edilmemişse, bu eksik import.
                 // Wildcard import durumunda severity kararını raporlama katmanı verir.
                 if !imports.contains(&lib_name) {
@@ -830,7 +1150,8 @@ pub fn find_hardcoded_secrets<'a, 'b>(
     // Bilinen API key prefix'leri
     const KEY_PREFIXES: &[&str] = &["sk-", "AIza", "amzn.mws", "AKIA", "ghp_", "glpat-"];
     // Hassas değişken adı kalıpları
-    const SENSITIVE_NAMES: &[&str] = &["password", "secret", "api_key", "token", "passwd", "apikey"];
+    const SENSITIVE_NAMES: &[&str] =
+        &["password", "secret", "api_key", "token", "passwd", "apikey"];
 
     // Assignment'larda: lhs = "string_literal" pattern'ı
     let assign_query = QUERY_ASSIGN_STRINGS.get_or_init(|| {
@@ -869,7 +1190,9 @@ pub fn find_hardcoded_secrets<'a, 'b>(
                 let row = lhs_node.start_position().row + 1;
 
                 // Kontrol 1: API key prefix'i var mı?
-                let has_prefix = KEY_PREFIXES.iter().any(|prefix| content.starts_with(prefix));
+                let has_prefix = KEY_PREFIXES
+                    .iter()
+                    .any(|prefix| content.starts_with(prefix));
 
                 // Kontrol 2: Değişken adı hassas mı?
                 let var_lower_bytes = var_name.as_bytes();
@@ -877,9 +1200,10 @@ pub fn find_hardcoded_secrets<'a, 'b>(
                     // Basit case-insensitive substring kontrolü (clone-free)
                     let s_bytes = sensitive.as_bytes();
                     var_lower_bytes.windows(s_bytes.len()).any(|window| {
-                        window.iter().zip(s_bytes.iter()).all(|(a, b)| {
-                            a.to_ascii_lowercase() == b.to_ascii_lowercase()
-                        })
+                        window
+                            .iter()
+                            .zip(s_bytes.iter())
+                            .all(|(a, b)| a.to_ascii_lowercase() == b.to_ascii_lowercase())
                     })
                 });
 
@@ -965,32 +1289,106 @@ pub fn find_infinite_loops<'a, 'b>(
 pub fn find_dangerous_executions<'a>(
     root_node: Node<'a>,
     source_code: &'a str,
-) -> Vec<(Node<'a>, &'a str)> {
+) -> Vec<(Node<'a>, String)> {
     let mut dangerous_calls = Vec::new();
 
-    // Tehlikeli fonksiyon çağrılarını bul: eval, exec, system
+    // Tehlikeli fonksiyon çağrılarını bul: eval, exec, system,
+    // os.system ve subprocess.* process başlatma API'leri.
     let dangerous_query = QUERY_DANGEROUS_EXECUTIONS.get_or_init(|| {
         Query::new(
             &tree_sitter_python::LANGUAGE.into(),
-            "(call function: (identifier) @func_name (#match? @func_name \"^(eval|exec|system)$\"))",
+            r#"
+            [
+              (call
+                function: (identifier) @func_name)
+              (call
+                function: (attribute
+                  object: (identifier) @obj
+                  attribute: (identifier) @method))
+            ]
+            "#,
         )
         .expect("Tehlikeli fonksiyon çağrıları sorgusu derlenirken hata oluştu!")
     });
 
     let mut qc = QueryCursor::new();
     let mut matches = qc.matches(dangerous_query, root_node, source_code.as_bytes());
+    let capture_names = dangerous_query.capture_names();
+    let mut shell_true_lines = HashSet::new();
 
     while let Some(m) = matches.next() {
+        let mut identifier_node = None;
+        let mut attribute_node = None;
+        let mut obj_name = None;
+        let mut method_name = None;
+
         for capture in m.captures {
-            if let Ok(func_name) = capture.node.utf8_text(source_code.as_bytes()) {
-                dangerous_calls.push((capture.node, func_name));
+            let capture_name = capture_names
+                .get(capture.index as usize)
+                .copied()
+                .unwrap_or("");
+
+            match capture_name {
+                "func_name" => identifier_node = Some(capture.node),
+                "obj" => {
+                    obj_name = capture.node.utf8_text(source_code.as_bytes()).ok();
+                    attribute_node = capture.node.parent();
+                }
+                "method" => {
+                    method_name = capture.node.utf8_text(source_code.as_bytes()).ok();
+                    attribute_node = capture.node.parent();
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(node) = identifier_node {
+            if let Ok(func_name) = node.utf8_text(source_code.as_bytes()) {
+                if matches!(func_name, "eval" | "exec" | "system") {
+                    dangerous_calls.push((node, func_name.to_string()));
+                }
+            }
+            continue;
+        }
+
+        let Some(obj) = obj_name else {
+            continue;
+        };
+        let Some(method) = method_name else {
+            continue;
+        };
+
+        let method_is_dangerous = match obj {
+            "os" => method == "system",
+            "subprocess" => matches!(method, "run" | "Popen" | "call" | "check_output"),
+            _ => false,
+        };
+
+        if !method_is_dangerous {
+            continue;
+        }
+
+        let node = attribute_node.unwrap_or_else(|| m.captures[0].node);
+        let func_name = format!("{}.{}", obj, method);
+        dangerous_calls.push((node, func_name.clone()));
+
+        if let Some(call_node) = node.parent() {
+            if call_node.kind() == "call" {
+                if let Ok(call_text) = call_node.utf8_text(source_code.as_bytes()) {
+                    let compact: String =
+                        call_text.chars().filter(|ch| !ch.is_whitespace()).collect();
+                    if compact.contains("shell=True")
+                        && shell_true_lines.insert(call_node.start_position().row)
+                    {
+                        dangerous_calls.push((node, format!("{} with shell=True", func_name)));
+                    }
+                }
             }
         }
     }
 
     dangerous_calls
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1002,11 +1400,12 @@ mod tests {
         let source = "import json\ndef veri_isle(veri):\n    return [x * 2 for x in veri]";
         let tree = crate::parser::parse_python_code(source).unwrap();
         let root = tree.root_node();
-        
+
         let hallucinated = vec![];
         let missing_imports = vec![];
-        
-        let undefined_vars = find_undefined_variables(root, source, &hallucinated, &missing_imports);
+
+        let undefined_vars =
+            find_undefined_variables(root, source, &hallucinated, &missing_imports);
         // x sahte hata olarak listeye eklenmemeli, yani tanımlanmamış değişken 0 çıkmalı
         assert_eq!(undefined_vars.len(), 0);
     }
@@ -1017,7 +1416,7 @@ mod tests {
         let source = "openai_key = \"sk-proj-AiZaFakeKey12345\"";
         let tree = crate::parser::parse_python_code(source).unwrap();
         let root = tree.root_node();
-        
+
         let secrets = find_hardcoded_secrets(root, source);
         // 1 tane güvenlik ihlali yakalamış olmalıyız
         assert_eq!(secrets.len(), 1);
@@ -1030,7 +1429,7 @@ mod tests {
         let source = "while True:\n    print(\"Sonsuz döngü\")";
         let tree = crate::parser::parse_python_code(source).unwrap();
         let root = tree.root_node();
-        
+
         let loops = find_infinite_loops(root, source);
         // 1 tane sonsuz döngü riski yakalamış olmalıyız
         assert_eq!(loops.len(), 1);
