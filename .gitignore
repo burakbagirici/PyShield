@@ -1,5 +1,14 @@
 /target/
 /src-tauri/target/
+
+# Local indexes and managed analyzer toolchains
+/.gitnexus/
+/.pyshield-tools/
+/.pyshield-ttols/
+**/.gitnexus/
+**/.pyshield-tools/
+**/.pyshield-ttols/
+
 *.exe
 *.msi
 .DS_Store

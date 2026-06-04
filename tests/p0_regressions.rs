@@ -1,6 +1,11 @@
 use std::fs;
+use std::sync::Mutex;
 
-use ai_code_analyzer::{Severity, analyze_folder, scan_python_files_recursive};
+use ai_code_analyzer::{
+    AnalysisOptions, Severity, analyze_folder_with_options, scan_python_files_recursive,
+};
+
+static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 fn fixture_path(name: &str) -> String {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -11,9 +16,15 @@ fn fixture_path(name: &str) -> String {
         .to_string()
 }
 
+fn analyze_fixture(name: &str) -> ai_code_analyzer::AnalysisReport {
+    let mut options = AnalysisOptions::default();
+    options.enable_external_tools = false;
+    analyze_folder_with_options(&fixture_path(name), &options).unwrap()
+}
+
 #[test]
 fn clean_alias_and_scope_fixture_has_no_p0_findings() {
-    let report = analyze_folder(&fixture_path("p0_clean_alias_scope")).unwrap();
+    let report = analyze_fixture("p0_clean_alias_scope");
 
     assert_eq!(report.summary.syntax_errors, 0);
     assert_eq!(report.summary.hallucinations, 0);
@@ -25,7 +36,7 @@ fn clean_alias_and_scope_fixture_has_no_p0_findings() {
 
 #[test]
 fn dangerous_attribute_calls_and_shell_true_are_reported() {
-    let report = analyze_folder(&fixture_path("p0_dangerous")).unwrap();
+    let report = analyze_fixture("p0_dangerous");
 
     assert!(report.summary.security_issues >= 8);
     let issues: Vec<_> = report.files.iter().flat_map(|file| &file.issues).collect();
@@ -51,7 +62,7 @@ fn dangerous_attribute_calls_and_shell_true_are_reported() {
 
 #[test]
 fn missing_import_fixture_reports_json_once() {
-    let report = analyze_folder(&fixture_path("p0_missing_import")).unwrap();
+    let report = analyze_fixture("p0_missing_import");
 
     assert_eq!(report.summary.missing_imports, 1);
     assert_eq!(report.summary.undefined_variables, 0);
@@ -65,7 +76,7 @@ fn missing_import_fixture_reports_json_once() {
 
 #[test]
 fn syntax_fixture_reports_syntax_error() {
-    let report = analyze_folder(&fixture_path("p0_syntax")).unwrap();
+    let report = analyze_fixture("p0_syntax");
 
     assert!(report.summary.syntax_errors >= 1);
     assert!(
@@ -78,7 +89,7 @@ fn syntax_fixture_reports_syntax_error() {
 
 #[test]
 fn wildcard_fixture_downgrades_to_warnings_without_failing_total() {
-    let report = analyze_folder(&fixture_path("p0_wildcard")).unwrap();
+    let report = analyze_fixture("p0_wildcard");
 
     assert_eq!(report.total_errors_found, 0);
     assert!(report.summary.hallucinations > 0 || report.summary.missing_imports > 0);
@@ -92,7 +103,7 @@ fn wildcard_fixture_downgrades_to_warnings_without_failing_total() {
 
 #[test]
 fn model_scope_fixture_ignores_class_fields_and_typed_params() {
-    let report = analyze_folder(&fixture_path("p0_model_scope")).unwrap();
+    let report = analyze_fixture("p0_model_scope");
 
     assert_eq!(report.summary.missing_imports, 0);
     assert_eq!(report.summary.undefined_variables, 0);
@@ -106,9 +117,13 @@ fn default_scan_excludes_cache_and_environment_directories() {
     let _ = fs::remove_dir_all(&root);
 
     fs::create_dir_all(root.join("src")).unwrap();
+    fs::create_dir_all(root.join(".gitnexus")).unwrap();
+    fs::create_dir_all(root.join(".pyshield-tools")).unwrap();
     fs::create_dir_all(root.join(".venv")).unwrap();
     fs::create_dir_all(root.join("node_modules")).unwrap();
     fs::write(root.join("src").join("good.py"), "print('ok')\n").unwrap();
+    fs::write(root.join(".gitnexus").join("bad.py"), "eval('1')\n").unwrap();
+    fs::write(root.join(".pyshield-tools").join("bad.py"), "eval('1')\n").unwrap();
     fs::write(root.join(".venv").join("bad.py"), "eval('1')\n").unwrap();
     fs::write(root.join("node_modules").join("bad.py"), "eval('1')\n").unwrap();
 
@@ -118,4 +133,73 @@ fn default_scan_excludes_cache_and_environment_directories() {
     assert!(files[0].ends_with("good.py"));
 
     fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn external_adapters_merge_managed_tool_outputs() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let root = std::env::temp_dir().join(format!(
+        "pyshield_adapter_target_test_{}",
+        std::process::id()
+    ));
+    let tools_root = std::env::temp_dir().join(format!(
+        "pyshield_adapter_tools_test_{}",
+        std::process::id()
+    ));
+    let python_scripts = tools_root.join("python").join("Scripts");
+    let node_bin = tools_root.join("node").join("node_modules").join(".bin");
+    let _ = fs::remove_dir_all(&root);
+    let _ = fs::remove_dir_all(&tools_root);
+
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&python_scripts).unwrap();
+    fs::create_dir_all(&node_bin).unwrap();
+    fs::write(root.join("sample.py"), "print('ok')\n").unwrap();
+    fs::write(
+        python_scripts.join("ruff.cmd"),
+        "@echo off\r\nif \"%1\"==\"--version\" (echo ruff 0.0.0& exit /b 0)\r\necho [{\"filename\":\"sample.py\",\"code\":\"F821\",\"message\":\"Undefined name `ok`\",\"location\":{\"row\":1,\"column\":7},\"fix\":null}]\r\n",
+    )
+    .unwrap();
+    fs::write(
+        python_scripts.join("bandit.cmd"),
+        "@echo off\r\nif \"%1\"==\"--version\" (echo bandit 0.0.0& exit /b 0)\r\necho {\"results\":[{\"filename\":\"sample.py\",\"line_number\":1,\"issue_text\":\"Possible shell injection\",\"issue_severity\":\"HIGH\",\"test_id\":\"B602\",\"code\":\"print('ok')\"}]}\r\n",
+    )
+    .unwrap();
+    fs::write(
+        node_bin.join("pyright.cmd"),
+        "@echo off\r\nif \"%1\"==\"--version\" (echo pyright 0.0.0& exit /b 0)\r\necho {\"generalDiagnostics\":[{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Import could not be resolved\",\"rule\":\"reportMissingImports\",\"range\":{\"start\":{\"line\":0,\"character\":0}}}]}\r\n",
+    )
+    .unwrap();
+
+    let previous_tools_dir = std::env::var_os("PYSHIELD_TOOLS_DIR");
+    unsafe {
+        std::env::set_var("PYSHIELD_TOOLS_DIR", &tools_root);
+    }
+
+    let report = ai_code_analyzer::analyze_folder(root.to_str().unwrap()).unwrap();
+
+    unsafe {
+        if let Some(previous_tools_dir) = previous_tools_dir {
+            std::env::set_var("PYSHIELD_TOOLS_DIR", previous_tools_dir);
+        } else {
+            std::env::remove_var("PYSHIELD_TOOLS_DIR");
+        }
+    }
+
+    let issues: Vec<_> = report.files.iter().flat_map(|file| &file.issues).collect();
+
+    assert_eq!(report.tool_statuses.len(), 3);
+    assert!(
+        report
+            .tool_statuses
+            .iter()
+            .all(|status| status.available && status.status == "ok")
+    );
+    assert!(issues.iter().any(|issue| issue.tool == "ruff"));
+    assert!(issues.iter().any(|issue| issue.tool == "bandit"));
+    assert!(issues.iter().any(|issue| issue.tool == "pyright"));
+
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(tools_root).unwrap();
 }

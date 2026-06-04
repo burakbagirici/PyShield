@@ -2,7 +2,7 @@
 
 Tarih: 2026-06-04  
 Kaynaklar: `Task0-Değerlendirme.md`, `Task1-Eksikler ve Knumlandırma.md`, mevcut repo analizi  
-Doğrulama: `cargo test` çalıştırıldı, 3 test başarılı
+Doğrulama: `cargo test` çalıştırıldı, 12 test başarılı
 
 ## Kısa Konumlandırma
 
@@ -221,7 +221,15 @@ Kabul kriterleri:
 
 P1 maddeleri PyShield'ı sadece kendi kurallarına bağlı kalmayan, açık kaynak analiz ekosistemini kullanan ürüne dönüştürür.
 
+Araç Seti Notu: Ruff, Bandit ve Pyright hedef repoya kurulu olmak zorunda değildir. PyShield kendi managed toolchain alanını kullanır: `.pyshield-tools/python` ve `.pyshield-tools/node`. `PYSHIELD_TOOLS_DIR` ile paketlenmiş/özel araç dizini override edilebilir. Hedef repo `.venv` ve `node_modules` araması yalnızca fallback'tir.
+
+Doğrulama Notu: `D:\PROGRAMMING\abey` managed toolchain ile analiz edildi. Native PyShield bulgusu 1764 seviyesini korudu; external adapterlar `ruff: ok / 0`, `bandit: ok / 3037`, `pyright: ok / 776` olarak rapora merge edildi. Toplam rapor bulgusu external tool çıktılarıyla birlikte 5577 oldu.
+
 ### BL-P1-001 - AnalyzerAdapter Katmanı
+
+Status: Tamamlandı
+
+Tamamlanma Notu: `src/adapters.rs` altında `AnalyzerAdapter` trait'i eklendi. PyShield native analiz paralel Rust akışı olarak korunurken Ruff/Bandit/Pyright harici adapterları rapora sonradan merge ediliyor. `tool_statuses` alanı eklendi; tool yoksa analiz kırılmadan `unavailable` bilgisi dönüyor. Araç keşfi PyShield managed toolchain öncelikli hale getirildi; hedef repo içindeki tool kurulumları sadece fallback olarak kullanılıyor.
 
 Yapılacaklar:
 
@@ -249,6 +257,10 @@ Kabul kriterleri:
 
 ### BL-P1-002 - Ruff Entegrasyonu
 
+Status: Tamamlandı
+
+Tamamlanma Notu: `RuffAdapter`, PyShield managed toolchain/PATH/fallback adaylarını deneyerek `ruff check . --output-format json --exit-zero` çıktısını normalize `Issue` şemasına çeviriyor. Ruff rule id'leri `Kullanılmayan Kod`, `Tanımsız Değişken`, `Eksik Import`, `Sözdizimi` veya `Lint` kategorilerine map ediliyor. Ruff 0.15.15 `.pyshield-tools/python` altına kuruldu.
+
 Amaç: Genel lint, unused import, unused variable ve style tarafında tekerleği yeniden icat etmemek.
 
 Yapılacaklar:
@@ -264,6 +276,10 @@ Kabul kriterleri:
 
 ### BL-P1-003 - Bandit Entegrasyonu
 
+Status: Tamamlandı
+
+Tamamlanma Notu: `BanditAdapter`, PyShield managed toolchain üzerinden `bandit -r . -f json -q` çıktısını parse edip Bandit `test_id`, severity, satır ve snippet bilgisini `Güvenlik İhlali` kategorisine normalize ediyor. Native PyShield security bulgularıyla aynı dosya bazlı rapor yapısına merge ediliyor. Bandit 1.9.4 `.pyshield-tools/python` altına kuruldu.
+
 Amaç: Güvenlik bulgularını olgun Python SAST kurallarıyla desteklemek.
 
 Yapılacaklar:
@@ -278,6 +294,10 @@ Kabul kriterleri:
 - Aynı satırdaki aynı risk iki kez ağırlaştırılmış skor üretmez.
 
 ### BL-P1-004 - Pyright Entegrasyonu
+
+Status: Tamamlandı
+
+Tamamlanma Notu: `PyrightAdapter`, PyShield managed node toolchain üzerinden `pyright . --outputjson` çıktısını parse ediyor. `reportMissingImports` eksik import, `reportUndefinedVariable` tanımsız değişken, diğer teşhisler `Type Checking` kategorisine map ediliyor ve aynı normalize issue şemasına dahil ediliyor. Pyright 1.1.410 `.pyshield-tools/node` altına kuruldu.
 
 Amaç: Tanımsız sembol ve type-checking tarafında PyShield'ın yüzeysel scope analizini olgun bir araçla desteklemek.
 
@@ -313,6 +333,12 @@ Kabul kriterleri:
 - Standart library modülleri dependency eksikliği olarak raporlanmaz.
 
 ### BL-P1-006 - Tauri UI Filtre ve Detay Deneyimi
+
+Status: Tamamlandı
+
+Tamamlanma Notu: Tauri frontend'e tool status paneli, severity/tool/category select filtreleri ve dosya path arama filtresi eklendi. Issue kartları `severity`, `tool`, `rule_id`, snippet, mesaj ve `fix_hint` gösteriyor; filtreler aynı raporu yeniden render ederek dosya accordion'unu daraltıyor.
+
+Kapanış Notu: BL-P1-006 kod tarafında `src-frontend/index.html` içinde tamamlandı. Aynı analiz raporunda tool status görünümü, boş sonuç mesajı, severity/tool/category filtreleri ve dosya yolu araması aktif çalışacak şekilde bağlandı.
 
 Yapılacaklar:
 

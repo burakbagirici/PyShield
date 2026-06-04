@@ -1,3 +1,4 @@
+mod adapters;
 mod parser;
 mod rules;
 
@@ -19,6 +20,8 @@ const RULE_LOOP: &str = "PYSHIELD_LOOP_001";
 
 pub const DEFAULT_EXCLUDED_DIRS: &[&str] = &[
     ".git",
+    ".gitnexus",
+    ".pyshield-tools",
     ".venv",
     "venv",
     "env",
@@ -37,6 +40,7 @@ pub const DEFAULT_EXCLUDED_DIRS: &[&str] = &[
 #[derive(Clone, Debug)]
 pub struct AnalysisOptions {
     pub excluded_dirs: Vec<String>,
+    pub enable_external_tools: bool,
 }
 
 impl Default for AnalysisOptions {
@@ -46,6 +50,7 @@ impl Default for AnalysisOptions {
                 .iter()
                 .map(|item| item.to_string())
                 .collect(),
+            enable_external_tools: true,
         }
     }
 }
@@ -138,6 +143,33 @@ fn issue_from_line(
     }
 }
 
+pub fn issue_from_external_tool(
+    file_path: String,
+    tool: &str,
+    rule_id: String,
+    category: &str,
+    severity: Severity,
+    line: usize,
+    column: usize,
+    message: String,
+    code_snippet: String,
+    fix_hint: Option<String>,
+) -> Issue {
+    Issue {
+        file_path,
+        tool: tool.to_string(),
+        rule_id,
+        category: category.to_string(),
+        severity,
+        line,
+        column,
+        message,
+        code_snippet,
+        confidence: 1.0,
+        fix_hint,
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Severity {
     #[serde(rename = "ERROR")]
@@ -185,6 +217,16 @@ pub struct FileAnalysisResult {
     pub error_breakdown: ErrorBreakdown,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ToolStatus {
+    pub tool: String,
+    pub available: bool,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    pub issue_count: usize,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ErrorSummary {
     pub syntax_errors: usize,
@@ -205,6 +247,8 @@ pub struct AnalysisReport {
     pub analysis_status: String,
     pub files: Vec<FileAnalysisResult>,
     pub summary: ErrorSummary,
+    #[serde(default)]
+    pub tool_statuses: Vec<ToolStatus>,
 }
 
 pub fn scan_python_files_recursive(dir_path: &str) -> Result<Vec<String>, String> {
@@ -788,18 +832,29 @@ pub fn analyze_folder_with_options(
                 security_issues: 0,
                 infinite_loops: 0,
             },
+            tool_statuses: vec![],
         });
     }
-    let results: Vec<FileAnalysisResult> = python_files
+    let mut results: Vec<FileAnalysisResult> = python_files
         .into_par_iter()
         .map(|p| analyze_single_file(&p))
         .collect();
-    Ok(build_report_from_results(folder_path, results))
+    let tool_statuses = if options.enable_external_tools {
+        adapters::run_external_adapters(folder_path, &mut results)
+    } else {
+        vec![]
+    };
+    Ok(build_report_from_results(
+        folder_path,
+        results,
+        tool_statuses,
+    ))
 }
 
 fn build_report_from_results(
     project_path: &str,
     results: Vec<FileAnalysisResult>,
+    tool_statuses: Vec<ToolStatus>,
 ) -> AnalysisReport {
     let mut total_errors = 0usize;
     let mut s = ErrorSummary {
@@ -834,6 +889,7 @@ fn build_report_from_results(
         analysis_status: status,
         files: results,
         summary: s,
+        tool_statuses,
     }
 }
 

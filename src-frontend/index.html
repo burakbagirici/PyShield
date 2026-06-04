@@ -113,6 +113,33 @@
         </div>
       </div>
 
+      <div id="tool-status-section" class="glass rounded-xl p-5 hidden">
+        <h2 class="text-lg font-bold mb-4 border-b border-slate-600 pb-2">Araç Durumu</h2>
+        <div id="tool-status-list" class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm"></div>
+      </div>
+
+      <div class="glass rounded-xl p-5">
+        <h2 class="text-lg font-bold mb-4 border-b border-slate-600 pb-2">Filtreler</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs uppercase font-semibold text-slate-400">Severity</span>
+            <select id="filter-severity" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100"></select>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs uppercase font-semibold text-slate-400">Tool</span>
+            <select id="filter-tool" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100"></select>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs uppercase font-semibold text-slate-400">Kategori</span>
+            <select id="filter-category" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100"></select>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs uppercase font-semibold text-slate-400">Dosya</span>
+            <input id="filter-file" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100" type="search" placeholder="path içinde ara" />
+          </label>
+        </div>
+      </div>
+
       <div class="glass rounded-xl overflow-hidden">
         <div class="p-5 border-b border-slate-600">
           <h2 class="text-lg font-bold">Hatalı Dosyalar</h2>
@@ -131,6 +158,7 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    let currentReport = null;
 
     function getTauri() {
       return window.__TAURI__;
@@ -184,6 +212,67 @@
       return typeof n === 'number' && !Number.isNaN(n) ? n : 0;
     }
 
+    function uniqueSorted(values) {
+      return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    }
+
+    function fillSelect(id, values, allLabel) {
+      const select = $(id);
+      const previous = select.value;
+      select.innerHTML = `<option value="">${escapeHtml(allLabel)}</option>` +
+        values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+      if ([...select.options].some((option) => option.value === previous)) {
+        select.value = previous;
+      }
+    }
+
+    function setupFilters(data) {
+      const issues = (data.files || []).flatMap((file) => Array.isArray(file.issues) ? file.issues : []);
+      fillSelect('filter-severity', uniqueSorted(issues.map((issue) => issue.severity || 'INFO')), 'Tümü');
+      fillSelect('filter-tool', uniqueSorted(issues.map((issue) => issue.tool || 'pyshield')), 'Tümü');
+      fillSelect('filter-category', uniqueSorted(issues.map((issue) => issue.category || 'Bulgu')), 'Tümü');
+    }
+
+    function issueMatchesFilters(issue, filePath) {
+      const severity = $('filter-severity').value;
+      const tool = $('filter-tool').value;
+      const category = $('filter-category').value;
+      const fileQuery = $('filter-file').value.trim().toLowerCase();
+
+      if (severity && (issue.severity || 'INFO') !== severity) return false;
+      if (tool && (issue.tool || 'pyshield') !== tool) return false;
+      if (category && (issue.category || 'Bulgu') !== category) return false;
+      if (fileQuery && !String(filePath || '').toLowerCase().includes(fileQuery)) return false;
+      return true;
+    }
+
+    function renderToolStatuses(statuses = []) {
+      const section = $('tool-status-section');
+      const list = $('tool-status-list');
+      if (!statuses.length) {
+        section.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+      }
+
+      section.classList.remove('hidden');
+      list.innerHTML = statuses.map((status) => {
+        const ok = status.available && status.status === 'ok';
+        const cls = ok
+          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+          : 'border-amber-500/30 bg-amber-500/10 text-amber-200';
+        const message = status.message || `${status.issue_count || 0} bulgu`;
+        return `
+          <div class="rounded-lg border ${cls} p-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-bold">${escapeHtml(status.tool || 'tool')}</span>
+              <span class="text-xs uppercase">${escapeHtml(status.status || 'unknown')}</span>
+            </div>
+            <p class="mt-1 text-xs opacity-90">${escapeHtml(message)}</p>
+          </div>`;
+      }).join('');
+    }
+
     function formatFileBreakdown(b) {
       if (!b) return '';
       const parts = [];
@@ -228,10 +317,13 @@
     }
 
     function renderReport(data) {
+      currentReport = data;
       const s = data.summary || {};
       $('metric-files').textContent = data.total_files_scanned ?? 0;
       $('metric-total').textContent = data.total_errors_found ?? 0;
       $('metric-status').textContent = data.analysis_status ?? '—';
+      setupFilters(data);
+      renderToolStatuses(data.tool_statuses || []);
 
       for (const [field, elId] of SUMMARY_TO_CARD) {
         $(elId).textContent = countFromSummary(s, field);
@@ -243,9 +335,16 @@
       const accordion = $('file-accordion');
       accordion.innerHTML = '';
 
-      const files = (data.files || []).filter((f) => (f.total_errors || 0) > 0);
+      const files = (data.files || [])
+        .map((file) => ({
+          ...file,
+          issues: Array.isArray(file.issues)
+            ? file.issues.filter((issue) => issueMatchesFilters(issue, file.file_path))
+            : [],
+        }))
+        .filter((file) => file.issues.length > 0);
       if (files.length === 0) {
-        accordion.innerHTML = '<p class="p-6 text-emerald-400 text-sm">Tüm dosyalar temiz görünüyor.</p>';
+        accordion.innerHTML = '<p class="p-6 text-emerald-400 text-sm">Filtreye uyan bulgu yok.</p>';
       } else {
         files.forEach((file, i) => {
           const id = `acc-${i}`;
@@ -259,7 +358,7 @@
             <button type="button" data-acc="${id}" class="acc-toggle w-full text-left px-5 py-4 hover:bg-slate-800/50 flex items-center justify-between gap-4">
               <div class="flex flex-col gap-1 min-w-0 flex-1">
                 <div class="flex items-center gap-3 min-w-0">
-                  <span class="shrink-0 px-2 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${file.total_errors} sorun</span>
+                  <span class="shrink-0 px-2 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${issues.length} sorun</span>
                   <span class="font-mono text-sm text-slate-200 truncate">${escapeHtml(file.file_path)}</span>
                 </div>
                 ${breakdown ? `<p class="text-xs text-slate-400 truncate pl-0.5">${escapeHtml(breakdown)}</p>` : ''}
@@ -333,6 +432,14 @@
       $('selected-path').classList.add('hidden');
       hideError();
       pickFolderAndAnalyze();
+    });
+    ['filter-severity', 'filter-tool', 'filter-category'].forEach((id) => {
+      $(id).addEventListener('change', () => {
+        if (currentReport) renderReport(currentReport);
+      });
+    });
+    $('filter-file').addEventListener('input', () => {
+      if (currentReport) renderReport(currentReport);
     });
   </script>
 </body>
