@@ -1,9 +1,9 @@
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 
-use ai_code_analyzer::{analyze_folder, generate_html_report};
+use ai_code_analyzer::{AnalysisOptions, analyze_folder_with_options, generate_html_report};
 
 fn main() {
     println!("🚀 AI Kod Analiz Motoru Başlatılıyor...\n");
@@ -17,14 +17,25 @@ fn main() {
         process::exit(1);
     }
 
-    let path_arg = &args[1];
+    let path_arg = args
+        .iter()
+        .skip(1)
+        .find(|arg| !arg.starts_with("--"))
+        .unwrap_or_else(|| {
+            eprintln!("❌ Hata: Lütfen analiz edilecek klasör yolunu belirtin!");
+            process::exit(1);
+        });
+    let native_only = args.iter().any(|arg| arg == "--native-only");
 
     if !Path::new(path_arg).is_dir() {
         eprintln!("❌ Hata: '{}' geçerli bir klasör değil!", path_arg);
         process::exit(1);
     }
 
-    let report = match analyze_folder(path_arg) {
+    let mut options = AnalysisOptions::default();
+    options.enable_external_tools = !native_only;
+
+    let report = match analyze_folder_with_options(path_arg, &options) {
         Ok(report) => report,
         Err(e) => {
             eprintln!("{}", e);
@@ -70,14 +81,23 @@ fn main() {
     }
     println!("{}", "═".repeat(70));
 
+    let report_dir = PathBuf::from("reports");
+    if let Err(e) = fs::create_dir_all(&report_dir) {
+        eprintln!("\n❌ Rapor klasörü oluşturulamadı: {}", e);
+    }
+
     generate_html_report(&report);
 
     match serde_json::to_string_pretty(&report) {
         Ok(json_content) => {
-            if let Err(e) = fs::write("rapor.json", json_content) {
+            let json_path = report_dir.join("rapor.json");
+            if let Err(e) = fs::write(&json_path, json_content) {
                 eprintln!("\n❌ JSON dosyası yazılamadı: {}", e);
             } else {
-                println!("\n✅ JSON rapor başarıyla oluşturuldu: rapor.json");
+                println!(
+                    "\n✅ JSON rapor başarıyla oluşturuldu: {}",
+                    json_path.display()
+                );
             }
         }
         Err(e) => eprintln!("\n❌ JSON serileştirme hatası: {}", e),

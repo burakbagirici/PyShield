@@ -413,11 +413,15 @@ fn analyze_single_file(file_path: &str) -> FileAnalysisResult {
 
         // 4. Halüsinasyon tespiti
         let defined_functions = rules::find_function_definitions(root_node, &yapay_zeka_kodu);
+        let defined_classes = rules::find_class_definitions(root_node, &yapay_zeka_kodu);
+        let defined_names = rules::find_defined_variables(root_node, &yapay_zeka_kodu);
 
         let hallucinated: Vec<(_, &str)> = all_function_calls
             .into_iter()
             .filter(|(node, func_name)| {
                 let is_unrecognized = !defined_functions.contains(func_name)
+                    && !defined_classes.contains(func_name)
+                    && !defined_names.contains(func_name)
                     && !imports.contains(func_name)
                     && !rules::BUILTIN_FUNCTIONS.contains(func_name);
                 is_unrecognized && should_report_error_for_node(node, &yapay_zeka_kodu)
@@ -898,6 +902,47 @@ pub fn run_analysis_on_folder(folder_path: &str) -> Result<String, String> {
         .map_err(|e| format!("JSON serileştirme hatası: {}", e))
 }
 
+pub fn run_analysis_on_folder_with_external_tools(
+    folder_path: &str,
+    enable_external_tools: bool,
+) -> Result<String, String> {
+    let mut options = AnalysisOptions::default();
+    options.enable_external_tools = enable_external_tools;
+    serde_json::to_string_pretty(&analyze_folder_with_options(folder_path, &options)?)
+        .map_err(|e| format!("JSON serileştirme hatası: {}", e))
+}
+
+pub fn run_gitnexus_status_on_folder(folder_path: &str) -> Result<String, String> {
+    if !Path::new(folder_path).is_dir() {
+        return Err(format!(
+            "❌ Hata: '{}' geçerli bir klasör değil!",
+            folder_path
+        ));
+    }
+    serde_json::to_string_pretty(&adapters::gitnexus_tool_status(folder_path))
+        .map_err(|e| format!("JSON serileştirme hatası: {}", e))
+}
+
+pub fn run_gitnexus_analyze_on_folder(folder_path: &str) -> Result<String, String> {
+    if !Path::new(folder_path).is_dir() {
+        return Err(format!(
+            "❌ Hata: '{}' geçerli bir klasör değil!",
+            folder_path
+        ));
+    }
+    adapters::run_gitnexus_analyze(folder_path)
+}
+
+pub fn run_gitnexus_query_on_folder(folder_path: &str, query: &str) -> Result<String, String> {
+    if !Path::new(folder_path).is_dir() {
+        return Err(format!(
+            "❌ Hata: '{}' geçerli bir klasör değil!",
+            folder_path
+        ));
+    }
+    adapters::run_gitnexus_query(folder_path, query)
+}
+
 pub fn generate_html_report(report: &AnalysisReport) {
     let mut html = String::with_capacity(8192);
 
@@ -1099,10 +1144,19 @@ pub fn generate_html_report(report: &AnalysisReport) {
 </html>"#,
     );
 
-    if let Err(e) = std::fs::write("rapor.html", html) {
+    let report_dir = Path::new("reports");
+    if let Err(e) = std::fs::create_dir_all(report_dir) {
+        eprintln!("\n❌ HTML rapor klasörü oluşturulamadı: {}", e);
+        return;
+    }
+    let report_path = report_dir.join("rapor.html");
+    if let Err(e) = std::fs::write(&report_path, html) {
         eprintln!("\n❌ HTML raporu oluşturulamadı: {}", e);
     } else {
-        println!("\n✅ HTML Dashboard başarıyla oluşturuldu: rapor.html");
+        println!(
+            "\n✅ HTML Dashboard başarıyla oluşturuldu: {}",
+            report_path.display()
+        );
     }
 }
 

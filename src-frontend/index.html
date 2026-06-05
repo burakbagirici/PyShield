@@ -53,6 +53,14 @@
         <span class="relative z-10">Analiz Edilecek Klasörü Seç</span>
         <span class="absolute inset-0 rounded-2xl bg-white/10 opacity-0 group-hover:opacity-100 transition"></span>
       </button>
+      <label class="glass rounded-xl px-4 py-3 text-left max-w-xl w-full flex flex-col gap-2">
+        <span class="text-xs uppercase font-semibold text-slate-400">Analiz Modu</span>
+        <select id="scan-mode" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100">
+          <option value="native">Hızlı Rust scan</option>
+          <option value="full">Tam toolchain scan</option>
+        </select>
+        <span class="text-xs text-slate-500">Hızlı mod sadece PyShield native kurallarını çalıştırır. Tam mod Ruff, Bandit, Pyright ve GitNexus status bilgisini de ekler.</span>
+      </label>
       <p id="selected-path" class="text-slate-500 text-sm font-mono max-w-full truncate hidden"></p>
     </section>
 
@@ -68,6 +76,25 @@
     </section>
 
     <section id="error-banner" class="hidden glass rounded-xl p-4 border border-rose-500/40 text-rose-300 text-sm"></section>
+
+    <section id="gitnexus-panel" class="hidden glass rounded-xl p-5 space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-slate-600 pb-3">
+        <div>
+          <h2 class="text-lg font-bold">GitNexus Knowledge Graph</h2>
+          <p class="text-slate-400 text-sm">Seçili proje için local graph index durumu, indexleme ve execution-flow sorgusu.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="btn-gitnexus-status" type="button" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm font-semibold">Durumu Yenile</button>
+          <button id="btn-gitnexus-analyze" type="button" class="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-sm font-semibold text-white">Indexle</button>
+        </div>
+      </div>
+      <div id="gitnexus-status-box" class="rounded-lg bg-slate-950/70 border border-slate-700 p-3 text-sm text-slate-300">Klasör seçildikten sonra GitNexus durumu burada görünecek.</div>
+      <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+        <input id="gitnexus-query-input" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100" type="search" placeholder="Örn: worker runtime flow, auth, database repository" />
+        <button id="btn-gitnexus-query" type="button" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white">Sorgula</button>
+      </div>
+      <pre id="gitnexus-output" class="hidden max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-black/40 border border-slate-800 p-3 text-xs text-slate-200"></pre>
+    </section>
 
     <section id="results-section" class="hidden space-y-8">
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -159,6 +186,7 @@
   <script>
     const $ = (id) => document.getElementById(id);
     let currentReport = null;
+    let currentFolderPath = null;
 
     function getTauri() {
       return window.__TAURI__;
@@ -179,6 +207,10 @@
       $('picker-section').classList.toggle('hidden', on);
       $('results-section').classList.add('hidden');
       hideError();
+    }
+
+    function selectedScanUsesExternalTools() {
+      return $('scan-mode').value === 'full';
     }
 
     function escapeHtml(text) {
@@ -271,6 +303,58 @@
             <p class="mt-1 text-xs opacity-90">${escapeHtml(message)}</p>
           </div>`;
       }).join('');
+    }
+
+    function renderGitNexusStatus(status) {
+      const box = $('gitnexus-status-box');
+      const ok = status?.available && status?.status === 'ok';
+      const cls = ok
+        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+        : 'border-amber-500/30 bg-amber-500/10 text-amber-200';
+      box.className = `rounded-lg border ${cls} p-3 text-sm`;
+      box.textContent = `${status?.tool || 'gitnexus'}: ${status?.status || 'unknown'}${status?.message ? ' | ' + status.message : ''}`;
+    }
+
+    async function refreshGitNexusStatus() {
+      const tauri = getTauri();
+      if (!currentFolderPath || !tauri?.core?.invoke) return;
+      $('gitnexus-panel').classList.remove('hidden');
+      $('gitnexus-status-box').textContent = 'GitNexus durumu okunuyor...';
+      try {
+        const raw = await tauri.core.invoke('run_gitnexus_status', { folderPath: currentFolderPath });
+        renderGitNexusStatus(parseAnalysisReport(raw));
+      } catch (e) {
+        renderGitNexusStatus({ tool: 'gitnexus', available: true, status: 'error', message: e?.message || String(e) });
+      }
+    }
+
+    async function runGitNexusAnalyze() {
+      const tauri = getTauri();
+      if (!currentFolderPath || !tauri?.core?.invoke) return;
+      const output = $('gitnexus-output');
+      output.classList.remove('hidden');
+      output.textContent = 'GitNexus index-only analiz çalışıyor...';
+      try {
+        const text = await tauri.core.invoke('run_gitnexus_analyze', { folderPath: currentFolderPath });
+        output.textContent = text || 'GitNexus analyze tamamlandı.';
+        await refreshGitNexusStatus();
+      } catch (e) {
+        output.textContent = 'GitNexus analyze hatası: ' + (e?.message || String(e));
+      }
+    }
+
+    async function runGitNexusQuery() {
+      const tauri = getTauri();
+      const query = $('gitnexus-query-input').value.trim();
+      if (!currentFolderPath || !query || !tauri?.core?.invoke) return;
+      const output = $('gitnexus-output');
+      output.classList.remove('hidden');
+      output.textContent = 'GitNexus sorgusu çalışıyor...';
+      try {
+        output.textContent = await tauri.core.invoke('run_gitnexus_query', { folderPath: currentFolderPath, query });
+      } catch (e) {
+        output.textContent = 'GitNexus query hatası: ' + (e?.message || String(e));
+      }
     }
 
     function formatFileBreakdown(b) {
@@ -387,7 +471,7 @@
     async function pickFolderAndAnalyze() {
       const tauri = getTauri();
       if (!tauri?.dialog?.open || !tauri?.core?.invoke) {
-        showError('Tauri ortamı bulunamadı. Uygulamayı "cargo tauri dev" ile çalıştırın.');
+        showError('Tauri ortamı bulunamadı. Uygulamayı "npm run tauri dev" ile çalıştırın.');
         return;
       }
 
@@ -407,13 +491,19 @@
       if (!selected) return;
 
       const folderPath = Array.isArray(selected) ? selected[0] : selected;
+      currentFolderPath = folderPath;
       const pathEl = $('selected-path');
       pathEl.textContent = folderPath;
       pathEl.classList.remove('hidden');
+      $('gitnexus-panel').classList.remove('hidden');
+      refreshGitNexusStatus();
 
       setLoading(true);
       try {
-        const raw = await tauri.core.invoke('run_analysis_on_folder', { folderPath });
+        const raw = await tauri.core.invoke('run_analysis_on_folder', {
+          folderPath,
+          enableExternalTools: selectedScanUsesExternalTools(),
+        });
         const report = parseAnalysisReport(raw);
         if (!report?.summary) {
           throw new Error('Analiz yanıtında summary eksik; JSON şeması beklenen formatta değil.');
@@ -427,6 +517,12 @@
     }
 
     $('btn-pick-folder').addEventListener('click', pickFolderAndAnalyze);
+    $('btn-gitnexus-status').addEventListener('click', refreshGitNexusStatus);
+    $('btn-gitnexus-analyze').addEventListener('click', runGitNexusAnalyze);
+    $('btn-gitnexus-query').addEventListener('click', runGitNexusQuery);
+    $('gitnexus-query-input').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') runGitNexusQuery();
+    });
     $('btn-new-scan').addEventListener('click', () => {
       $('results-section').classList.add('hidden');
       $('selected-path').classList.add('hidden');

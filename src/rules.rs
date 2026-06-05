@@ -648,7 +648,7 @@ fn is_class_scope_binding(node: Node) -> bool {
 
 /// AKILLI KURAL 3 (DEVAM):
 /// Kodda tanımlanan tüm değişkenleri bulur (parametreler, assignmentlar, loop vars, imports).
-fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<&'a str> {
+pub fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<&'a str> {
     let mut defined_vars = Vec::new();
 
     for import in collect_import_symbols(root_node, source_code) {

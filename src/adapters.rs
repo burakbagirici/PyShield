@@ -134,7 +134,13 @@ impl AnalyzerAdapter for PyrightAdapter {
             .as_ref()
             .ok_or_else(|| "pyright bulunamadı".to_string())?;
         let root = Path::new(project_path);
-        let output = command.output(&[".", "--outputjson"], root)?;
+        let mut args = vec![".".to_string(), "--outputjson".to_string()];
+        if let Some(python_path) = project_python_interpreter(root) {
+            args.push("--pythonpath".to_string());
+            args.push(python_path);
+        }
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let output = command.output(&arg_refs, root)?;
         parse_pyright_output(root, &output.stdout)
     }
 }
@@ -143,13 +149,13 @@ pub fn run_external_adapters(
     project_path: &str,
     results: &mut Vec<FileAnalysisResult>,
 ) -> Vec<ToolStatus> {
+    let mut statuses = vec![gitnexus_tool_status(project_path)];
     let adapters: Vec<Box<dyn AnalyzerAdapter>> = vec![
         Box::new(RuffAdapter::new(project_path)),
         Box::new(BanditAdapter::new(project_path)),
         Box::new(PyrightAdapter::new(project_path)),
     ];
 
-    let mut statuses = Vec::new();
     for adapter in adapters {
         if !adapter.is_available() {
             statuses.push(ToolStatus {
@@ -289,7 +295,7 @@ fn pyshield_managed_candidates(binary: &str) -> Vec<ToolCommand> {
     let mut candidates = Vec::new();
     for tools_root in pyshield_tools_roots() {
         candidates.extend(python_tool_candidates(&tools_root, binary));
-        if binary == "pyright" {
+        if matches!(binary, "pyright" | "gitnexus") {
             candidates.extend(managed_node_candidates(&tools_root, binary));
         }
     }
@@ -393,11 +399,143 @@ fn normalize_path(root: &Path, path: &str) -> String {
     } else {
         root.join(candidate)
     };
-    joined
-        .canonicalize()
-        .unwrap_or(joined)
-        .to_string_lossy()
-        .to_string()
+    normalize_display_path(joined.canonicalize().unwrap_or(joined))
+}
+
+fn normalize_display_path(path: PathBuf) -> String {
+    let value = path.to_string_lossy().to_string();
+    strip_windows_verbatim_prefix(&value)
+}
+
+fn strip_windows_verbatim_prefix(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{}", rest)
+    } else if let Some(rest) = path.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        path.to_string()
+    }
+}
+
+fn is_test_path(file_path: &str) -> bool {
+    let normalized = file_path.replace('\\', "/").to_ascii_lowercase();
+    normalized.contains("/tests/")
+        || normalized.starts_with("tests/")
+        || normalized
+            .rsplit('/')
+            .next()
+            .is_some_and(|name| name.starts_with("test_") || name.ends_with("_test.py"))
+}
+
+pub fn gitnexus_tool_status(project_path: &str) -> ToolStatus {
+    let root = Path::new(project_path);
+    let Some(command) = find_tool_command(project_path, "gitnexus") else {
+        return ToolStatus {
+            tool: "gitnexus".to_string(),
+            available: false,
+            status: "unavailable".to_string(),
+            message: Some("gitnexus PyShield araç seti veya PATH içinde bulunamadı.".to_string()),
+            issue_count: 0,
+        };
+    };
+
+    match command.output(&["status"], root) {
+        Ok(output) => {
+            let text = command_output_text(&output);
+            let status = if text.to_ascii_lowercase().contains("not indexed") {
+                "not_indexed"
+            } else if output.status.success() {
+                "ok"
+            } else {
+                "error"
+            };
+            ToolStatus {
+                tool: "gitnexus".to_string(),
+                available: true,
+                status: status.to_string(),
+                message: Some(compact_tool_message(&text)),
+                issue_count: 0,
+            }
+        }
+        Err(e) => ToolStatus {
+            tool: "gitnexus".to_string(),
+            available: true,
+            status: "error".to_string(),
+            message: Some(e),
+            issue_count: 0,
+        },
+    }
+}
+
+pub fn run_gitnexus_analyze(project_path: &str) -> Result<String, String> {
+    let root = Path::new(project_path);
+    let command = find_tool_command(project_path, "gitnexus")
+        .ok_or_else(|| "gitnexus PyShield araç seti veya PATH içinde bulunamadı.".to_string())?;
+    let output = command.output(&["analyze", project_path, "--index-only"], root)?;
+    let text = command_output_text(&output);
+    if output.status.success() {
+        Ok(text)
+    } else {
+        Err(compact_tool_message(&text))
+    }
+}
+
+pub fn run_gitnexus_query(project_path: &str, query: &str) -> Result<String, String> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Err("GitNexus sorgusu boş olamaz.".to_string());
+    }
+
+    let root = Path::new(project_path);
+    let command = find_tool_command(project_path, "gitnexus")
+        .ok_or_else(|| "gitnexus PyShield araç seti veya PATH içinde bulunamadı.".to_string())?;
+    let output = command.output(&["query", "-r", project_path, "-l", "5", trimmed], root)?;
+    let text = command_output_text(&output);
+    if output.status.success() {
+        Ok(text)
+    } else {
+        Err(compact_tool_message(&text))
+    }
+}
+
+fn command_output_text(output: &Output) -> String {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    format!("{}{}", stdout, stderr)
+}
+
+fn compact_tool_message(text: &str) -> String {
+    let lines: Vec<_> = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(4)
+        .collect();
+    if lines.is_empty() {
+        "Durum çıktısı boş.".to_string()
+    } else {
+        lines.join(" | ")
+    }
+}
+
+fn project_python_interpreter(root: &Path) -> Option<String> {
+    let candidates = if cfg!(windows) {
+        vec![
+            root.join(".venv").join("Scripts").join("python.exe"),
+            root.join("venv").join("Scripts").join("python.exe"),
+            root.join("env").join("Scripts").join("python.exe"),
+        ]
+    } else {
+        vec![
+            root.join(".venv").join("bin").join("python"),
+            root.join("venv").join("bin").join("python"),
+            root.join("env").join("bin").join("python"),
+        ]
+    };
+    candidates
+        .into_iter()
+        .find(|candidate| candidate.is_file())
+        .map(normalize_display_path)
 }
 
 fn snippet_for_line(file_path: &str, line: usize) -> String {
@@ -491,8 +629,11 @@ fn parse_bandit_output(root: &Path, bytes: &[u8]) -> Result<Vec<Issue>, String> 
     Ok(report
         .results
         .into_iter()
-        .map(|finding| {
+        .filter_map(|finding| {
             let file_path = normalize_path(root, &finding.filename);
+            if should_suppress_bandit_finding(&finding, &file_path) {
+                return None;
+            }
             let severity = match finding.issue_severity.as_str() {
                 "HIGH" | "MEDIUM" => Severity::Error,
                 _ => Severity::Warning,
@@ -505,7 +646,7 @@ fn parse_bandit_output(root: &Path, bytes: &[u8]) -> Result<Vec<Issue>, String> 
                 .filter(|code| !code.is_empty())
                 .map(ToOwned::to_owned)
                 .unwrap_or_else(|| snippet_for_line(&file_path, line));
-            issue_from_external_tool(
+            Some(issue_from_external_tool(
                 file_path,
                 "bandit",
                 finding.test_id,
@@ -519,9 +660,13 @@ fn parse_bandit_output(root: &Path, bytes: &[u8]) -> Result<Vec<Issue>, String> 
                     "Bandit bulgusunu inceleyin; güvenli API veya secret yönetimi kullanın."
                         .to_string(),
                 ),
-            )
+            ))
         })
         .collect())
+}
+
+fn should_suppress_bandit_finding(finding: &BanditFinding, file_path: &str) -> bool {
+    finding.test_id == "B101" && is_test_path(file_path)
 }
 
 #[derive(Deserialize)]
@@ -553,17 +698,24 @@ struct PyrightPosition {
 fn parse_pyright_output(root: &Path, bytes: &[u8]) -> Result<Vec<Issue>, String> {
     let report: PyrightReport =
         serde_json::from_slice(bytes).map_err(|e| format!("pyright JSON parse hatası: {}", e))?;
+    let declared_dependencies = collect_project_dependencies(root);
     Ok(report
         .general_diagnostics
         .into_iter()
-        .map(|diagnostic| {
+        .filter_map(|diagnostic| {
             let file_path = normalize_path(root, &diagnostic.file);
-            let rule_id = diagnostic.rule.unwrap_or_else(|| "PYRIGHT".to_string());
+            let rule_id = diagnostic
+                .rule
+                .clone()
+                .unwrap_or_else(|| "PYRIGHT".to_string());
+            if should_suppress_pyright_diagnostic(&rule_id, &diagnostic, &declared_dependencies) {
+                return None;
+            }
             let (category, severity) = pyright_category_and_severity(&rule_id, &diagnostic.severity);
             let line = diagnostic.range.start.line + 1;
             let column = diagnostic.range.start.character + 1;
             let snippet = snippet_for_line(&file_path, line);
-            issue_from_external_tool(
+            Some(issue_from_external_tool(
                 file_path,
                 "pyright",
                 rule_id,
@@ -574,9 +726,172 @@ fn parse_pyright_output(root: &Path, bytes: &[u8]) -> Result<Vec<Issue>, String>
                 diagnostic.message,
                 snippet,
                 Some("Pyright type/import teşhisini inceleyin; tip, import veya sembol tanımını düzeltin.".to_string()),
-            )
+            ))
         })
         .collect())
+}
+
+fn should_suppress_pyright_diagnostic(
+    rule_id: &str,
+    diagnostic: &PyrightDiagnostic,
+    declared_dependencies: &HashSet<String>,
+) -> bool {
+    matches!(
+        rule_id,
+        "reportMissingImports" | "reportMissingModuleSource"
+    ) && missing_import_name(&diagnostic.message)
+        .is_some_and(|import_name| dependency_declares_import(declared_dependencies, &import_name))
+}
+
+fn missing_import_name(message: &str) -> Option<String> {
+    let start = message.find('"')? + 1;
+    let rest = &message[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+fn dependency_declares_import(declared_dependencies: &HashSet<String>, import_name: &str) -> bool {
+    let Some(top_level) = import_name.split('.').next() else {
+        return false;
+    };
+    declared_dependencies.contains(&normalize_dependency_name(top_level))
+}
+
+fn collect_project_dependencies(root: &Path) -> HashSet<String> {
+    let mut dependencies = HashSet::new();
+    collect_pyproject_dependencies(root, &mut dependencies);
+    collect_requirements_dependencies(root, &mut dependencies);
+    dependencies
+}
+
+fn collect_pyproject_dependencies(root: &Path, dependencies: &mut HashSet<String>) {
+    let path = root.join("pyproject.toml");
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(value) = toml::from_str::<toml::Value>(&content) else {
+        return;
+    };
+
+    if let Some(project) = value.get("project") {
+        collect_dependency_array(project.get("dependencies"), dependencies);
+        if let Some(optional) = project
+            .get("optional-dependencies")
+            .and_then(toml::Value::as_table)
+        {
+            for deps in optional.values() {
+                collect_dependency_array(Some(deps), dependencies);
+            }
+        }
+    }
+
+    collect_dependency_groups(value.get("dependency-groups"), dependencies);
+
+    if let Some(poetry) = value
+        .get("tool")
+        .and_then(|tool| tool.get("poetry"))
+        .and_then(toml::Value::as_table)
+    {
+        if let Some(deps) = poetry.get("dependencies").and_then(toml::Value::as_table) {
+            collect_dependency_table_keys(deps, dependencies);
+        }
+        if let Some(groups) = poetry.get("group").and_then(toml::Value::as_table) {
+            for group in groups.values() {
+                if let Some(deps) = group.get("dependencies").and_then(toml::Value::as_table) {
+                    collect_dependency_table_keys(deps, dependencies);
+                }
+            }
+        }
+    }
+}
+
+fn collect_dependency_groups(value: Option<&toml::Value>, dependencies: &mut HashSet<String>) {
+    if let Some(groups) = value.and_then(toml::Value::as_table) {
+        for group in groups.values() {
+            collect_dependency_array(Some(group), dependencies);
+        }
+    }
+}
+
+fn collect_dependency_array(value: Option<&toml::Value>, dependencies: &mut HashSet<String>) {
+    if let Some(items) = value.and_then(toml::Value::as_array) {
+        for item in items {
+            if let Some(raw) = item.as_str() {
+                add_dependency_name(raw, dependencies);
+            }
+        }
+    }
+}
+
+fn collect_dependency_table_keys(
+    table: &toml::map::Map<String, toml::Value>,
+    dependencies: &mut HashSet<String>,
+) {
+    for name in table.keys() {
+        if !name.eq_ignore_ascii_case("python") {
+            add_dependency_name(name, dependencies);
+        }
+    }
+}
+
+fn collect_requirements_dependencies(root: &Path, dependencies: &mut HashSet<String>) {
+    for filename in [
+        "requirements.txt",
+        "requirements-dev.txt",
+        "dev-requirements.txt",
+    ] {
+        let Ok(content) = std::fs::read_to_string(root.join(filename)) else {
+            continue;
+        };
+        for line in content.lines() {
+            let dependency = line.split('#').next().unwrap_or("").trim();
+            if dependency.is_empty()
+                || dependency.starts_with('-')
+                || dependency.starts_with("git+")
+                || dependency.starts_with("http:")
+                || dependency.starts_with("https:")
+            {
+                continue;
+            }
+            add_dependency_name(dependency, dependencies);
+        }
+    }
+}
+
+fn add_dependency_name(raw: &str, dependencies: &mut HashSet<String>) {
+    let name: String = raw
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+        .collect();
+    if name.is_empty() {
+        return;
+    }
+
+    let normalized = normalize_dependency_name(&name);
+    dependencies.insert(normalized.clone());
+    dependencies.insert(normalized.replace('-', "_"));
+    dependencies.insert(normalized.replace('_', "-"));
+
+    for alias in dependency_import_aliases(&normalized) {
+        dependencies.insert(alias.to_string());
+    }
+}
+
+fn normalize_dependency_name(name: &str) -> String {
+    name.to_ascii_lowercase().replace('-', "_")
+}
+
+fn dependency_import_aliases(name: &str) -> &'static [&'static str] {
+    match name {
+        "beautifulsoup4" => &["bs4"],
+        "pillow" => &["pil"],
+        "pyyaml" => &["yaml"],
+        "python_dotenv" => &["dotenv"],
+        _ => &[],
+    }
 }
 
 fn pyright_category_and_severity(rule_id: &str, severity: &str) -> (&'static str, Severity) {

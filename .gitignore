@@ -1,5 +1,9 @@
 /target/
 /src-tauri/target/
+/node_modules/
+/reports/*.json
+/reports/*.html
+/logs/*.log
 
 # Local indexes and managed analyzer toolchains
 /.gitnexus/

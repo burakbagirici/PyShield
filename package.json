@@ -1,0 +1,16 @@
+{
+  "name": "pyshield",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "tauri:build": "tauri build",
+    "tauri:dev": "tauri dev",
+    "tools:install": "uv venv .pyshield-tools\\python && uv pip install --python .pyshield-tools\\python\\Scripts\\python.exe ruff==0.15.15 bandit==1.9.4 && if not exist .pyshield-tools\\node mkdir .pyshield-tools\\node && cd .pyshield-tools\\node && npm install gitnexus@1.6.5 pyright@1.1.410",
+    "analyze": "cargo run --"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.2"
+  }
+}

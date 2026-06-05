@@ -221,9 +221,9 @@ Kabul kriterleri:
 
 P1 maddeleri PyShield'ı sadece kendi kurallarına bağlı kalmayan, açık kaynak analiz ekosistemini kullanan ürüne dönüştürür.
 
-Araç Seti Notu: Ruff, Bandit ve Pyright hedef repoya kurulu olmak zorunda değildir. PyShield kendi managed toolchain alanını kullanır: `.pyshield-tools/python` ve `.pyshield-tools/node`. `PYSHIELD_TOOLS_DIR` ile paketlenmiş/özel araç dizini override edilebilir. Hedef repo `.venv` ve `node_modules` araması yalnızca fallback'tir.
+Araç Seti Notu: Ruff, Bandit, Pyright ve GitNexus hedef repoya kurulu olmak zorunda değildir. PyShield kendi managed toolchain alanını kullanır: `.pyshield-tools/python` ve `.pyshield-tools/node`. `npm run tools:install` bu toolchain'i yeniden kurar. `PYSHIELD_TOOLS_DIR` ile paketlenmiş/özel araç dizini override edilebilir. Hedef repo `.venv` ve `node_modules` araması yalnızca fallback'tir. GitNexus analiz bulgusu üretmez; hedef repo index durumunu `tool_statuses` içinde gösterir.
 
-Doğrulama Notu: `D:\PROGRAMMING\abey` managed toolchain ile analiz edildi. Native PyShield bulgusu 1764 seviyesini korudu; external adapterlar `ruff: ok / 0`, `bandit: ok / 3037`, `pyright: ok / 776` olarak rapora merge edildi. Toplam rapor bulgusu external tool çıktılarıyla birlikte 5577 oldu.
+Doğrulama Notu: `D:\PROGRAMMING\abey` managed toolchain ile analiz edildi. Native PyShield bulgusu 1764 seviyesinden 892'ye, halüsinasyon bulguları 887'den 15'e düştü. External adapterlar `gitnexus: ok`, `ruff: ok / 0`, `bandit: ok / 129`, `pyright: ok / 691` olarak rapora merge edildi. Test dosyalarındaki Bandit `B101` assert gürültüsü filtrelendi, `pyproject.toml` içinde tanımlı dependency'ler için Pyright missing-import false-positive'leri bastırıldı, constructor/class call ve callable parametre false-positive'leri azaltıldı, Windows `\\?\` path normalizasyonu düzeltildi. Hızlı Rust scan 14.1 sn / 892 bulgu, tam toolchain scan 34.6 sn / 1712 bulgu üretti.
 
 ### BL-P1-001 - AnalyzerAdapter Katmanı
 
@@ -339,6 +339,10 @@ Status: Tamamlandı
 Tamamlanma Notu: Tauri frontend'e tool status paneli, severity/tool/category select filtreleri ve dosya path arama filtresi eklendi. Issue kartları `severity`, `tool`, `rule_id`, snippet, mesaj ve `fix_hint` gösteriyor; filtreler aynı raporu yeniden render ederek dosya accordion'unu daraltıyor.
 
 Kapanış Notu: BL-P1-006 kod tarafında `src-frontend/index.html` içinde tamamlandı. Aynı analiz raporunda tool status görünümü, boş sonuç mesajı, severity/tool/category filtreleri ve dosya yolu araması aktif çalışacak şekilde bağlandı.
+
+Build Notu: Root `package.json` eklendi; `npm run tauri build` komutu Tauri CLI 2.11.2 ile çalışıyor. Güncel build çıktıları `src-tauri/target/release/app.exe`, `src-tauri/target/release/bundle/msi/PyShield_0.1.0_x64_en-US.msi` ve `src-tauri/target/release/bundle/nsis/PyShield_0.1.0_x64-setup.exe`.
+
+Frontend Güncelleme Notu: Analiz modu seçimi eklendi: hızlı Rust scan veya tam toolchain scan. GitNexus paneli frontend'e eklendi; seçili klasör için status yenileme, index-only analyze ve query komutları Tauri üzerinden çalışıyor.
 
 Yapılacaklar:
 

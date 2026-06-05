@@ -153,9 +153,16 @@ fn external_adapters_merge_managed_tool_outputs() {
     let _ = fs::remove_dir_all(&tools_root);
 
     fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(root.join("tests")).unwrap();
     fs::create_dir_all(&python_scripts).unwrap();
     fs::create_dir_all(&node_bin).unwrap();
     fs::write(root.join("sample.py"), "print('ok')\n").unwrap();
+    fs::write(root.join("tests").join("test_sample.py"), "assert True\n").unwrap();
+    fs::write(
+        root.join("pyproject.toml"),
+        "[project]\ndependencies = [\"asyncpg>=0.29.0\"]\n",
+    )
+    .unwrap();
     fs::write(
         python_scripts.join("ruff.cmd"),
         "@echo off\r\nif \"%1\"==\"--version\" (echo ruff 0.0.0& exit /b 0)\r\necho [{\"filename\":\"sample.py\",\"code\":\"F821\",\"message\":\"Undefined name `ok`\",\"location\":{\"row\":1,\"column\":7},\"fix\":null}]\r\n",
@@ -163,12 +170,17 @@ fn external_adapters_merge_managed_tool_outputs() {
     .unwrap();
     fs::write(
         python_scripts.join("bandit.cmd"),
-        "@echo off\r\nif \"%1\"==\"--version\" (echo bandit 0.0.0& exit /b 0)\r\necho {\"results\":[{\"filename\":\"sample.py\",\"line_number\":1,\"issue_text\":\"Possible shell injection\",\"issue_severity\":\"HIGH\",\"test_id\":\"B602\",\"code\":\"print('ok')\"}]}\r\n",
+        "@echo off\r\nif \"%1\"==\"--version\" (echo bandit 0.0.0& exit /b 0)\r\necho {\"results\":[{\"filename\":\"sample.py\",\"line_number\":1,\"issue_text\":\"Possible shell injection\",\"issue_severity\":\"HIGH\",\"test_id\":\"B602\",\"code\":\"print('ok')\"},{\"filename\":\"tests/test_sample.py\",\"line_number\":1,\"issue_text\":\"Use of assert detected\",\"issue_severity\":\"LOW\",\"test_id\":\"B101\",\"code\":\"assert True\"}]}\r\n",
     )
     .unwrap();
     fs::write(
         node_bin.join("pyright.cmd"),
-        "@echo off\r\nif \"%1\"==\"--version\" (echo pyright 0.0.0& exit /b 0)\r\necho {\"generalDiagnostics\":[{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Import could not be resolved\",\"rule\":\"reportMissingImports\",\"range\":{\"start\":{\"line\":0,\"character\":0}}}]}\r\n",
+        "@echo off\r\nif \"%1\"==\"--version\" (echo pyright 0.0.0& exit /b 0)\r\necho {\"generalDiagnostics\":[{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Import \\\"asyncpg\\\" could not be resolved\",\"rule\":\"reportMissingImports\",\"range\":{\"start\":{\"line\":0,\"character\":0}}},{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Undefined variable\",\"rule\":\"reportUndefinedVariable\",\"range\":{\"start\":{\"line\":0,\"character\":0}}}]}\r\n",
+    )
+    .unwrap();
+    fs::write(
+        node_bin.join("gitnexus.cmd"),
+        "@echo off\r\nif \"%1\"==\"--version\" (echo 1.6.5& exit /b 0)\r\nif \"%1\"==\"status\" (echo Status: up-to-date& exit /b 0)\r\necho ok\r\n",
     )
     .unwrap();
 
@@ -189,7 +201,7 @@ fn external_adapters_merge_managed_tool_outputs() {
 
     let issues: Vec<_> = report.files.iter().flat_map(|file| &file.issues).collect();
 
-    assert_eq!(report.tool_statuses.len(), 3);
+    assert_eq!(report.tool_statuses.len(), 4);
     assert!(
         report
             .tool_statuses
@@ -199,6 +211,27 @@ fn external_adapters_merge_managed_tool_outputs() {
     assert!(issues.iter().any(|issue| issue.tool == "ruff"));
     assert!(issues.iter().any(|issue| issue.tool == "bandit"));
     assert!(issues.iter().any(|issue| issue.tool == "pyright"));
+    assert!(
+        report
+            .tool_statuses
+            .iter()
+            .any(|status| status.tool == "gitnexus" && status.status == "ok")
+    );
+    assert!(
+        !issues
+            .iter()
+            .any(|issue| issue.tool == "bandit" && issue.rule_id == "B101")
+    );
+    assert!(
+        !issues
+            .iter()
+            .any(|issue| issue.tool == "pyright" && issue.rule_id == "reportMissingImports")
+    );
+    assert!(
+        issues
+            .iter()
+            .any(|issue| issue.tool == "pyright" && issue.rule_id == "reportUndefinedVariable")
+    );
 
     fs::remove_dir_all(root).unwrap();
     fs::remove_dir_all(tools_root).unwrap();
