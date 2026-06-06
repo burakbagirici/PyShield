@@ -2,7 +2,7 @@
 
 Tarih: 2026-06-04  
 Kaynaklar: `Task0-Değerlendirme.md`, `Task1-Eksikler ve Knumlandırma.md`, mevcut repo analizi  
-Doğrulama: `cargo test` çalıştırıldı, 12 test başarılı
+Doğrulama: `cargo test` 12/12 başarılı; `cargo check --manifest-path src-tauri\Cargo.toml` başarılı; frontend script syntax check başarılı; `npm run tauri build` app.exe, MSI ve NSIS bundle üretti.
 
 ## Kısa Konumlandırma
 
@@ -92,7 +92,7 @@ Kabul kriterleri:
 
 Status: Tamamlandı
 
-Tamamlanma Notu: `AnalysisOptions` ve `DEFAULT_EXCLUDED_DIRS` eklendi. Varsayılan recursive tarama `.git`, `.venv`, cache, `site-packages`, `node_modules`, `target`, `dist`, `build` ve `agent-logs` klasörlerini atlıyor. Exclude davranışı integration test ile doğrulandı.
+Tamamlanma Notu: `AnalysisOptions` ve `DEFAULT_EXCLUDED_DIRS` eklendi. Varsayılan recursive tarama `.git`, `.venv`, cache, `.tmp`, `.tox`, `tmp`, `temp`, `pytesttemp`, `site-packages`, `node_modules`, `target`, `dist`, `build` ve `agent-logs` klasörlerini atlıyor. Exclude davranışı integration test ile doğrulandı.
 
 Problem: Recursive tarama her klasöre giriyor. Büyük repo, sanal ortam, cache ve build klasörleri gereksiz bulgu ve performans sorunu üretir.
 
@@ -223,7 +223,7 @@ P1 maddeleri PyShield'ı sadece kendi kurallarına bağlı kalmayan, açık kayn
 
 Araç Seti Notu: Ruff, Bandit, Pyright ve GitNexus hedef repoya kurulu olmak zorunda değildir. PyShield kendi managed toolchain alanını kullanır: `.pyshield-tools/python` ve `.pyshield-tools/node`. `npm run tools:install` bu toolchain'i yeniden kurar. `PYSHIELD_TOOLS_DIR` ile paketlenmiş/özel araç dizini override edilebilir. Hedef repo `.venv` ve `node_modules` araması yalnızca fallback'tir. GitNexus analiz bulgusu üretmez; hedef repo index durumunu `tool_statuses` içinde gösterir.
 
-Doğrulama Notu: `D:\PROGRAMMING\abey` managed toolchain ile analiz edildi. Native PyShield bulgusu 1764 seviyesinden 892'ye, halüsinasyon bulguları 887'den 15'e düştü. External adapterlar `gitnexus: ok`, `ruff: ok / 0`, `bandit: ok / 129`, `pyright: ok / 691` olarak rapora merge edildi. Test dosyalarındaki Bandit `B101` assert gürültüsü filtrelendi, `pyproject.toml` içinde tanımlı dependency'ler için Pyright missing-import false-positive'leri bastırıldı, constructor/class call ve callable parametre false-positive'leri azaltıldı, Windows `\\?\` path normalizasyonu düzeltildi. Hızlı Rust scan 14.1 sn / 892 bulgu, tam toolchain scan 34.6 sn / 1712 bulgu üretti.
+Doğrulama Notu: `D:\PROGRAMMING\abey` managed toolchain ile analiz edildi. Native PyShield bulgusu 1764 seviyesinden 892'ye, halüsinasyon bulguları 887'den 15'e düştü. External adapterlar `gitnexus: ok`, `ruff: ok / 0`, `bandit: ok / 129`, `pyright: ok / 691` olarak rapora merge edildi. Test dosyalarındaki Bandit `B101` assert gürültüsü filtrelendi, `pyproject.toml` içinde tanımlı dependency'ler için Pyright missing-import false-positive'leri bastırıldı, constructor/class call ve callable parametre false-positive'leri azaltıldı, Windows `\\?\` path normalizasyonu düzeltildi. Hızlı Rust scan 14.1 sn / 892 bulgu, tam toolchain scan 31.9 sn / 1712 bulgu üretti. `.tmp`, `.tox`, `tmp`, `temp` ve `pytesttemp` default exclude listesine eklendikten sonra Abey pytest temp erişim uyarıları temizlendi.
 
 ### BL-P1-001 - AnalyzerAdapter Katmanı
 
@@ -342,7 +342,11 @@ Kapanış Notu: BL-P1-006 kod tarafında `src-frontend/index.html` içinde tamam
 
 Build Notu: Root `package.json` eklendi; `npm run tauri build` komutu Tauri CLI 2.11.2 ile çalışıyor. Güncel build çıktıları `src-tauri/target/release/app.exe`, `src-tauri/target/release/bundle/msi/PyShield_0.1.0_x64_en-US.msi` ve `src-tauri/target/release/bundle/nsis/PyShield_0.1.0_x64-setup.exe`.
 
+Son Build Notu: 2026-06-05 final koşusunda `cargo test` 12/12 geçti. `npm run tauri build` uyarısız şekilde release binary, MSI ve NSIS installer üretti.
+
 Frontend Güncelleme Notu: Analiz modu seçimi eklendi: hızlı Rust scan veya tam toolchain scan. GitNexus paneli frontend'e eklendi; seçili klasör için status yenileme, index-only analyze ve query komutları Tauri üzerinden çalışıyor.
+
+Yeniden Tasarım Kapanış Notu: 2026-06-05 tarihinde frontend prototip yapıdan tam PyShield Workbench uygulama kabuğuna taşındı. Sidebar navigasyonu, Overview, Issues, GitNexus Graph, AI Workbench ve Settings ekranları `src-frontend/index.html` içinde kodlandı. Tauri backend'e SQLite provider ayarları, OpenAI/DeepSeek/OpenAI-compatible provider listesi, API key kaydetme/silme ve AI + GitNexus workflow komutları eklendi. GitNexus query çağrısı path yerine registry repo etiketi kullanacak şekilde düzeltildi; index komutuna `force` seçeneği eklendi.
 
 Yapılacaklar:
 
@@ -355,6 +359,86 @@ Kabul kriterleri:
 
 - Kullanıcı aynı analiz raporunda araç, kategori ve severity bazında filtreleme yapabilir.
 - Boş sonuç ve tool unavailable durumları düzgün görünür.
+
+### BL-P1-007 - Frontend Workbench Ürün Planı
+
+Status: Tamamlandı
+
+Tamamlanma Notu: `src-frontend/index.html` tek sayfalı Tauri arayüzü olarak yeniden tasarlandı. Kullanıcı ilk ekranda doğrudan proje path'i, scan modu ve Run Scan komutunu görür; sidebar ile Overview, Issues, GitNexus Graph, AI Workbench ve Settings ekranlarına geçer. UI artık ham JSON basmak yerine tool status, issue table, inspector, GitNexus node canvas, raw output ve AI summary alanlarını ayrıştırıyor.
+
+Plan:
+
+- App shell: sol sidebar, üst command bar, proje path input'u, klasör seçme, Native/Full Toolchain scan modu.
+- Overview: metrikler, PyShield/Ruff/Bandit/Pyright/GitNexus status strip, hızlı issue triage ve selected issue inspector.
+- Issues: severity/tool/category filtreleri, path/rule/message araması ve detay inspector.
+- GitNexus Graph: `status`, `analyze --index-only`, `analyze --index-only --force`, `query`, limit seçimi, JSON raw output ve node/edge SVG canvas.
+- AI Workbench: konu prompt'u, provider seçimi, GitNexus query + LLM özet akışı.
+- Settings: OpenAI, DeepSeek ve OpenAI-compatible provider kartları; model, base URL ve API key yönetimi.
+- Responsive davranış: desktop iki kolon, dar ekranda sidebar üst navigasyona ve paneller tek kolona düşer.
+
+Kabul kriterleri:
+
+- Kullanıcı GitNexus komutlarını frontend'den çalıştırabilir.
+- Query çıktısı JSON ise node/edge görünümüne dönüştürülür; warning varsa inspector alanında görünür.
+- API key UI'a geri basılmaz; yalnızca `API Key Saved` durumu gösterilir.
+- Frontend external CDN gerektirmez; CSS/JS local tek dosyadadır.
+
+### BL-P1-008 - SQLite Provider Ayarları ve AI + GitNexus Workflow
+
+Status: Tamamlandı
+
+Tamamlanma Notu: Tauri backend'e `list_ai_provider_configs`, `save_ai_provider_config`, `delete_ai_provider_config` ve `run_ai_gitnexus_query` komutları eklendi. Provider kayıtları Tauri app data altında `settings.sqlite` içinde saklanır. OpenAI provider'ı Responses API, DeepSeek ve OpenAI-compatible provider'lar Chat Completions formatıyla çağrılır. AI workflow önce GitNexus query çalıştırır, sonra GitNexus çıktısını seçili modele özetletir.
+
+Plan:
+
+- SQLite tablo standardı: `ai_provider_configs(provider, api_key, model, base_url, updated_at)`.
+- OpenAI preset: `gpt-5.5`, `gpt-5.4-mini`, `gpt-5.4-nano`.
+- DeepSeek preset: varsayılan `deepseek-v4-flash`, ayrıca `deepseek-v4-pro`; uyumluluk alias'ları olarak `deepseek-chat`, `deepseek-reasoner`.
+- OpenAI-compatible preset: kullanıcı base URL ve model override eder.
+- API key alanı write-only davranır; listeleme komutu anahtarı döndürmez.
+- AI yanıtı JSON olarak `provider`, `model`, `gitnexus_query`, `gitnexus_output`, `gitnexus_json`, `answer` alanlarını taşır.
+
+Kabul kriterleri:
+
+- Provider kaydedilmeden AI workflow çalıştırıldığında net hata döner.
+- Provider kaydı sonrası aynı ekranda model/base URL/saved state güncellenir.
+- GitNexus query başarısızsa LLM çağrısı yapılmaz ve hata kullanıcıya döner.
+
+### BL-P1-009 - GitNexus Komut Sağlığı ve Abey Kalibrasyonu
+
+Status: Tamamlandı
+
+Tamamlanma Notu: `D:\PROGRAMMING\abey` için `gitnexus analyze D:\PROGRAMMING\abey --index-only --force` çalıştırıldı; 16.1 sn içinde 26.615 node, 44.124 edge, 799 cluster ve 300 flow üretildi. `gitnexus status` up-to-date dönüyor. CLI query'nin `-r` parametresinde path yerine repo label kullanılması gerektiği tespit edildi ve PyShield adapter bu davranışa göre düzeltildi. Query çıktısında FTS warning gibi sağlık sinyalleri frontend raw output ve graph inspector alanlarında görünür.
+
+Plan:
+
+- `run_gitnexus_analyze(folder, force)` Tauri komutu.
+- `run_gitnexus_query(folder, query, limit)` Tauri komutu.
+- Repo selector: target path'in son klasör adı GitNexus registry label olarak kullanılır.
+- Force rebuild butonu FTS/query sağlığı bozulduğunda kullanılabilir.
+- Abey gerçek proje kalibrasyonu bu akışla yapılır.
+
+Kabul kriterleri:
+
+- `abey` üzerinde GitNexus index üretimi frontend/backend akışından tetiklenebilir.
+- Query limit kullanıcı tarafından seçilebilir.
+- GitNexus command hataları uygulamayı çökertmez; raw output veya toast ile görünür.
+
+### BL-P1-010 - Tool Bazlı Çalıştırma ve View Layout İyileştirmeleri
+
+Status: Tamamlandı
+
+Tamamlanma Notu: Üst command bar'daki Native/Full dropdown'u görünür segmented tool seçimine çevrildi. Kullanıcı artık `Native`, `Full`, `Ruff`, `Bandit`, `Pyright` veya `GitNexus` hedeflerinden birini seçip yalnız o aracı çalıştırabilir. Backend tarafında `AnalysisOptions` native analiz ve external tool listesini ayrı ayrı taşıyacak şekilde genişletildi; Tauri `run_analysis_on_folder` komutu `selected_tools` parametresi kabul ediyor. `tests/p0_regressions.rs` içinde yalnız Ruff çalıştırma regression testi eklendi.
+
+UI Kapanış Notu: Issues ekranında sol tablo paneli viewport yüksekliğine stretch edildi ve uzun Pyright mesajları üç satırda clamp edilerek inspector'a taşındı. GitNexus ekranında graph canvas ve raw output paneli viewport içine sığacak grid düzenine alındı. AI Workbench ve GitNexus inspector içinde boş query + FTS indeks uyarısı özel callout olarak gösteriliyor; callout içinden `Force Rebuild` aksiyonu çalıştırılabiliyor.
+
+Kabul kriterleri:
+
+- Kullanıcı yalnız Ruff/Bandit/Pyright/GitNexus çalıştırabilir.
+- Native analiz seçilmediğinde PyShield status `not_run` görünür.
+- Issues tablosu ekranın yarısında kalmaz; uzun mesajlar tablo satırını büyütmez.
+- GitNexus raw output ekran dışında kalmaz.
+- FTS warning durumunda kullanıcıya force rebuild aksiyonu gösterilir.
 
 ## P2 - CI Uyumu, AI Risk Katmanı ve Ölçeklenme
 

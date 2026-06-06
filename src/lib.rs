@@ -29,6 +29,11 @@ pub const DEFAULT_EXCLUDED_DIRS: &[&str] = &[
     ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
+    ".tmp",
+    ".tox",
+    "tmp",
+    "temp",
+    "pytesttemp",
     "site-packages",
     "node_modules",
     "target",
@@ -40,7 +45,9 @@ pub const DEFAULT_EXCLUDED_DIRS: &[&str] = &[
 #[derive(Clone, Debug)]
 pub struct AnalysisOptions {
     pub excluded_dirs: Vec<String>,
+    pub enable_native_analysis: bool,
     pub enable_external_tools: bool,
+    pub enabled_external_tools: Vec<String>,
 }
 
 impl Default for AnalysisOptions {
@@ -50,7 +57,9 @@ impl Default for AnalysisOptions {
                 .iter()
                 .map(|item| item.to_string())
                 .collect(),
+            enable_native_analysis: true,
             enable_external_tools: true,
+            enabled_external_tools: Vec::new(),
         }
     }
 }
@@ -818,8 +827,12 @@ pub fn analyze_folder_with_options(
             folder_path
         ));
     }
-    let python_files = scan_python_files_recursive_with_options(folder_path, options)?;
-    if python_files.is_empty() {
+    let python_files = if options.enable_native_analysis {
+        scan_python_files_recursive_with_options(folder_path, options)?
+    } else {
+        Vec::new()
+    };
+    if options.enable_native_analysis && python_files.is_empty() && !options.enable_external_tools {
         return Ok(AnalysisReport {
             analysis_timestamp: Utc::now().to_rfc3339(),
             project_path: folder_path.to_string(),
@@ -839,12 +852,25 @@ pub fn analyze_folder_with_options(
             tool_statuses: vec![],
         });
     }
-    let mut results: Vec<FileAnalysisResult> = python_files
-        .into_par_iter()
-        .map(|p| analyze_single_file(&p))
-        .collect();
+    let mut results: Vec<FileAnalysisResult> = if options.enable_native_analysis {
+        python_files
+            .into_par_iter()
+            .map(|p| analyze_single_file(&p))
+            .collect()
+    } else {
+        Vec::new()
+    };
     let tool_statuses = if options.enable_external_tools {
-        adapters::run_external_adapters(folder_path, &mut results)
+        if options.enabled_external_tools.is_empty() {
+            adapters::run_external_adapters(folder_path, &mut results)
+        } else {
+            let tools: Vec<&str> = options
+                .enabled_external_tools
+                .iter()
+                .map(String::as_str)
+                .collect();
+            adapters::run_external_adapters_with_tools(folder_path, &mut results, &tools)
+        }
     } else {
         vec![]
     };
@@ -912,6 +938,43 @@ pub fn run_analysis_on_folder_with_external_tools(
         .map_err(|e| format!("JSON serileştirme hatası: {}", e))
 }
 
+pub fn run_analysis_on_folder_with_selected_tools(
+    folder_path: &str,
+    selected_tools: &[String],
+) -> Result<String, String> {
+    let normalized: Vec<String> = selected_tools
+        .iter()
+        .map(|tool| tool.trim().to_ascii_lowercase())
+        .filter(|tool| !tool.is_empty())
+        .collect();
+    let full_toolchain = normalized.iter().any(|tool| tool == "full");
+    let native_enabled = full_toolchain
+        || normalized
+            .iter()
+            .any(|tool| matches!(tool.as_str(), "native" | "pyshield"));
+    let external_tools = if full_toolchain {
+        vec![
+            "gitnexus".to_string(),
+            "ruff".to_string(),
+            "bandit".to_string(),
+            "pyright".to_string(),
+        ]
+    } else {
+        normalized
+            .into_iter()
+            .filter(|tool| matches!(tool.as_str(), "gitnexus" | "ruff" | "bandit" | "pyright"))
+            .collect()
+    };
+
+    let mut options = AnalysisOptions::default();
+    options.enable_native_analysis = native_enabled;
+    options.enable_external_tools = !external_tools.is_empty();
+    options.enabled_external_tools = external_tools;
+
+    serde_json::to_string_pretty(&analyze_folder_with_options(folder_path, &options)?)
+        .map_err(|e| format!("JSON serileştirme hatası: {}", e))
+}
+
 pub fn run_gitnexus_status_on_folder(folder_path: &str) -> Result<String, String> {
     if !Path::new(folder_path).is_dir() {
         return Err(format!(
@@ -923,24 +986,28 @@ pub fn run_gitnexus_status_on_folder(folder_path: &str) -> Result<String, String
         .map_err(|e| format!("JSON serileştirme hatası: {}", e))
 }
 
-pub fn run_gitnexus_analyze_on_folder(folder_path: &str) -> Result<String, String> {
+pub fn run_gitnexus_analyze_on_folder(folder_path: &str, force: bool) -> Result<String, String> {
     if !Path::new(folder_path).is_dir() {
         return Err(format!(
             "❌ Hata: '{}' geçerli bir klasör değil!",
             folder_path
         ));
     }
-    adapters::run_gitnexus_analyze(folder_path)
+    adapters::run_gitnexus_analyze(folder_path, force)
 }
 
-pub fn run_gitnexus_query_on_folder(folder_path: &str, query: &str) -> Result<String, String> {
+pub fn run_gitnexus_query_on_folder(
+    folder_path: &str,
+    query: &str,
+    limit: usize,
+) -> Result<String, String> {
     if !Path::new(folder_path).is_dir() {
         return Err(format!(
             "❌ Hata: '{}' geçerli bir klasör değil!",
             folder_path
         ));
     }
-    adapters::run_gitnexus_query(folder_path, query)
+    adapters::run_gitnexus_query(folder_path, query, limit)
 }
 
 pub fn generate_html_report(report: &AnalysisReport) {

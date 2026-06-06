@@ -149,7 +149,28 @@ pub fn run_external_adapters(
     project_path: &str,
     results: &mut Vec<FileAnalysisResult>,
 ) -> Vec<ToolStatus> {
-    let mut statuses = vec![gitnexus_tool_status(project_path)];
+    run_external_adapters_with_tools(
+        project_path,
+        results,
+        &["gitnexus", "ruff", "bandit", "pyright"],
+    )
+}
+
+pub fn run_external_adapters_with_tools(
+    project_path: &str,
+    results: &mut Vec<FileAnalysisResult>,
+    enabled_tools: &[&str],
+) -> Vec<ToolStatus> {
+    let enabled: HashSet<String> = enabled_tools
+        .iter()
+        .map(|tool| tool.to_ascii_lowercase())
+        .collect();
+    let mut statuses = Vec::new();
+
+    if enabled.contains("gitnexus") {
+        statuses.push(gitnexus_tool_status(project_path));
+    }
+
     let adapters: Vec<Box<dyn AnalyzerAdapter>> = vec![
         Box::new(RuffAdapter::new(project_path)),
         Box::new(BanditAdapter::new(project_path)),
@@ -157,6 +178,10 @@ pub fn run_external_adapters(
     ];
 
     for adapter in adapters {
+        if !enabled.contains(adapter.name()) {
+            continue;
+        }
+
         if !adapter.is_available() {
             statuses.push(ToolStatus {
                 tool: adapter.name().to_string(),
@@ -467,11 +492,15 @@ pub fn gitnexus_tool_status(project_path: &str) -> ToolStatus {
     }
 }
 
-pub fn run_gitnexus_analyze(project_path: &str) -> Result<String, String> {
+pub fn run_gitnexus_analyze(project_path: &str, force: bool) -> Result<String, String> {
     let root = Path::new(project_path);
     let command = find_tool_command(project_path, "gitnexus")
         .ok_or_else(|| "gitnexus PyShield araç seti veya PATH içinde bulunamadı.".to_string())?;
-    let output = command.output(&["analyze", project_path, "--index-only"], root)?;
+    let mut args = vec!["analyze", project_path, "--index-only"];
+    if force {
+        args.push("--force");
+    }
+    let output = command.output(&args, root)?;
     let text = command_output_text(&output);
     if output.status.success() {
         Ok(text)
@@ -480,7 +509,7 @@ pub fn run_gitnexus_analyze(project_path: &str) -> Result<String, String> {
     }
 }
 
-pub fn run_gitnexus_query(project_path: &str, query: &str) -> Result<String, String> {
+pub fn run_gitnexus_query(project_path: &str, query: &str, limit: usize) -> Result<String, String> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
         return Err("GitNexus sorgusu boş olamaz.".to_string());
@@ -489,13 +518,34 @@ pub fn run_gitnexus_query(project_path: &str, query: &str) -> Result<String, Str
     let root = Path::new(project_path);
     let command = find_tool_command(project_path, "gitnexus")
         .ok_or_else(|| "gitnexus PyShield araç seti veya PATH içinde bulunamadı.".to_string())?;
-    let output = command.output(&["query", "-r", project_path, "-l", "5", trimmed], root)?;
+    let repo_selector = gitnexus_repo_selector(project_path);
+    let limit_value = limit.clamp(1, 50).to_string();
+    let output = command.output(
+        &[
+            "query",
+            "-r",
+            repo_selector.as_str(),
+            "-l",
+            limit_value.as_str(),
+            trimmed,
+        ],
+        root,
+    )?;
     let text = command_output_text(&output);
     if output.status.success() {
         Ok(text)
     } else {
         Err(compact_tool_message(&text))
     }
+}
+
+fn gitnexus_repo_selector(project_path: &str) -> String {
+    Path::new(project_path)
+        .file_name()
+        .and_then(|part| part.to_str())
+        .filter(|name| !name.trim().is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| project_path.to_string())
 }
 
 fn command_output_text(output: &Output) -> String {

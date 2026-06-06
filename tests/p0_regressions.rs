@@ -190,6 +190,12 @@ fn external_adapters_merge_managed_tool_outputs() {
     }
 
     let report = ai_code_analyzer::analyze_folder(root.to_str().unwrap()).unwrap();
+    let mut ruff_only_options = AnalysisOptions::default();
+    ruff_only_options.enable_native_analysis = false;
+    ruff_only_options.enable_external_tools = true;
+    ruff_only_options.enabled_external_tools = vec!["ruff".to_string()];
+    let ruff_only_report =
+        analyze_folder_with_options(root.to_str().unwrap(), &ruff_only_options).unwrap();
 
     unsafe {
         if let Some(previous_tools_dir) = previous_tools_dir {
@@ -216,6 +222,15 @@ fn external_adapters_merge_managed_tool_outputs() {
             .tool_statuses
             .iter()
             .any(|status| status.tool == "gitnexus" && status.status == "ok")
+    );
+    assert_eq!(ruff_only_report.tool_statuses.len(), 1);
+    assert_eq!(ruff_only_report.tool_statuses[0].tool, "ruff");
+    assert!(
+        ruff_only_report
+            .files
+            .iter()
+            .flat_map(|file| &file.issues)
+            .all(|issue| issue.tool == "ruff")
     );
     assert!(
         !issues

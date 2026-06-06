@@ -3,540 +3,1825 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PyShield — AI Kod Analizi</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>PyShield Workbench</title>
   <style>
-    body {
-      background: radial-gradient(ellipse at top, #1e293b 0%, #0f172a 55%, #020617 100%);
+    :root {
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --surface-soft: #f9fbfd;
+      --surface-strong: #eef3f6;
+      --text: #17212b;
+      --muted: #657386;
+      --subtle: #8a97a8;
+      --border: #d9e2ea;
+      --border-strong: #c3d0dc;
+      --primary: #0f766e;
+      --primary-dark: #0b5e57;
+      --primary-soft: #d9f3ee;
+      --danger: #c2413c;
+      --danger-soft: #fde7e5;
+      --warning: #b7791f;
+      --warning-soft: #fff2cf;
+      --info: #2563a9;
+      --info-soft: #e4effb;
+      --ok: #237a4f;
+      --ok-soft: #e0f3e8;
+      --shadow: 0 18px 45px rgba(25, 38, 52, 0.08);
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body { min-height: 100vh; overflow: hidden; }
+    button, input, select, textarea {
+      font: inherit;
+      letter-spacing: 0;
+    }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: 0.6; }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+      height: 100vh;
+      min-height: 720px;
+    }
+
+    .sidebar {
+      background: #18232d;
       color: #f8fafc;
-      font-family: ui-sans-serif, system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid rgba(255,255,255,0.08);
     }
-    .glass {
-      background: rgba(30, 41, 59, 0.65);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(148, 163, 184, 0.15);
+
+    .brand {
+      padding: 22px 20px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
     }
-    .accordion-panel { display: none; }
-    .accordion-panel.open { display: block; }
-    @keyframes pulse-ring {
-      0% { transform: scale(0.9); opacity: 0.6; }
-      50% { transform: scale(1.05); opacity: 1; }
-      100% { transform: scale(0.9); opacity: 0.6; }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 760;
+      font-size: 17px;
     }
-    .loader-ring { animation: pulse-ring 1.6s ease-in-out infinite; }
-    @keyframes scan-line {
-      0% { transform: translateY(-100%); }
-      100% { transform: translateY(100%); }
+
+    .mark {
+      width: 31px;
+      height: 31px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      background: #22a79a;
+      color: #ffffff;
+      box-shadow: inset 0 -8px 16px rgba(0,0,0,0.16);
     }
-    .scan-line {
-      animation: scan-line 1.8s linear infinite;
-      background: linear-gradient(180deg, transparent, rgba(56, 189, 248, 0.35), transparent);
+
+    .brand small {
+      display: block;
+      color: #9fb0c0;
+      margin-top: 7px;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .nav {
+      padding: 14px 10px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .nav button {
+      color: #cbd5df;
+      background: transparent;
+      border: 0;
+      border-radius: 7px;
+      padding: 10px 11px;
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .nav button:hover { background: rgba(255,255,255,0.07); color: #ffffff; }
+    .nav button.active { background: #22313c; color: #ffffff; }
+    .nav svg, .icon { width: 18px; height: 18px; }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 16px 14px;
+      color: #9fb0c0;
+      font-size: 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .main {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.8), rgba(245,247,250,0.96) 28%),
+        var(--bg);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(10px);
+    }
+
+    .project-control {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .input, .select, .textarea {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #ffffff;
+      color: var(--text);
+      outline: none;
+      min-height: 38px;
+    }
+
+    .input, .select { padding: 0 11px; }
+    .textarea { padding: 10px 11px; resize: vertical; min-height: 108px; }
+    .input:focus, .select:focus, .textarea:focus {
+      border-color: #60a99e;
+      box-shadow: 0 0 0 3px rgba(15,118,110,0.12);
+    }
+
+    .command-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .scan-targets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .scan-target {
+      min-height: 32px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 9px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .scan-target:hover { background: #edf4f7; color: var(--text); }
+    .scan-target.active { background: var(--primary); color: #ffffff; }
+
+    .btn {
+      min-height: 38px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .btn:hover { border-color: var(--border-strong); background: var(--surface-soft); }
+    .btn.primary { background: var(--primary); color: #ffffff; border-color: var(--primary); }
+    .btn.primary:hover { background: var(--primary-dark); }
+    .btn.warning { background: var(--warning-soft); border-color: #edc970; color: #754b05; }
+    .btn.danger { background: var(--danger-soft); border-color: #efaaa6; color: #8d2925; }
+    .btn.icon-only { width: 38px; padding: 0; }
+
+    .workspace {
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+    }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+    .overview-grid {
+      grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+      align-items: start;
+    }
+    .two-col {
+      grid-template-columns: minmax(0, 1fr) 390px;
+      align-items: start;
+    }
+    .metrics {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .panel-header {
+      padding: 14px 15px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 760;
+      color: var(--text);
+    }
+
+    .panel-subtitle {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .panel-body { padding: 14px 15px; }
+    .compact-body { padding: 10px 12px; }
+
+    .metric {
+      padding: 14px 15px;
+      min-height: 92px;
+      display: grid;
+      align-content: space-between;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 780;
+    }
+
+    .metric strong {
+      font-size: 28px;
+      line-height: 1;
+      font-weight: 790;
+    }
+
+    .metric em {
+      color: var(--subtle);
+      font-style: normal;
+      font-size: 12px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 510px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--surface-soft);
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      padding: 9px 10px;
+      text-transform: uppercase;
+      font-size: 10px;
+      font-weight: 790;
+    }
+
+    tbody td {
+      border-bottom: 1px solid var(--border);
+      padding: 9px 10px;
+      vertical-align: top;
+    }
+
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #f7fafc; }
+    tbody tr.selected { background: var(--primary-soft); }
+
+    .path-cell {
+      font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+      color: #354555;
+      max-width: 340px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .message-cell {
+      color: #334155;
+      min-width: 300px;
+      max-width: 560px;
+      line-height: 1.35;
+    }
+
+    .message-preview {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 0 8px;
+      font-size: 11px;
+      font-weight: 760;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .badge.error { color: #8d2925; background: var(--danger-soft); border-color: #efaaa6; }
+    .badge.warning { color: #754b05; background: var(--warning-soft); border-color: #edc970; }
+    .badge.info { color: #1b4f80; background: var(--info-soft); border-color: #b9d6ee; }
+    .badge.ok { color: #1e5e3d; background: var(--ok-soft); border-color: #a8dec0; }
+    .badge.muted { color: #52606f; background: #edf2f7; border-color: var(--border); }
+
+    .tool-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .tool-item {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 10px;
+      background: var(--surface-soft);
+      min-height: 74px;
+    }
+    .tool-item strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 7px;
+      text-transform: capitalize;
+    }
+    .tool-item small {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .detail-block {
+      display: grid;
+      gap: 10px;
+      font-size: 13px;
+      color: #334155;
+    }
+
+    .code {
+      font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+      background: #13202a;
+      color: #d7f7ee;
+      border-radius: 7px;
+      padding: 10px;
+      overflow: auto;
+      white-space: pre-wrap;
+      line-height: 1.45;
+      font-size: 12px;
+    }
+
+    .raw {
+      width: 100%;
+      max-height: 260px;
+      overflow: auto;
+      background: #13202a;
+      color: #dbeafe;
+      border-radius: 7px;
+      padding: 12px;
+      white-space: pre-wrap;
+      font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .graph-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 310px;
+      min-height: 560px;
+    }
+
+    .graph-canvas {
+      min-height: 560px;
+      background:
+        linear-gradient(90deg, rgba(217,226,234,0.44) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(217,226,234,0.44) 1px, transparent 1px),
+        #fbfdff;
+      background-size: 32px 32px;
+      border-right: 1px solid var(--border);
+      position: relative;
+    }
+
+    #graph-svg {
+      width: 100%;
+      height: 100%;
+      min-height: 560px;
+      display: block;
+    }
+
+    .graph-node { cursor: pointer; }
+    .graph-node circle { transition: transform 0.16s ease, stroke-width 0.16s ease; }
+    .graph-node:hover circle { transform: scale(1.04); stroke-width: 3; }
+    .node-label {
+      font-size: 11px;
+      font-weight: 700;
+      fill: #17212b;
+      pointer-events: none;
+    }
+    .edge-line {
+      stroke: #9db3c6;
+      stroke-width: 1.5;
+      opacity: 0.68;
+    }
+
+    .inspector {
+      padding: 14px;
+      min-width: 0;
+      background: var(--surface);
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr);
+      gap: 7px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .kv span { color: var(--muted); }
+    .kv strong {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .ai-layout {
+      display: grid;
+      grid-template-columns: 390px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .answer {
+      line-height: 1.55;
+      color: #273646;
+      white-space: pre-wrap;
+      font-size: 14px;
+    }
+
+    .callout {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .callout.warning {
+      background: var(--warning-soft);
+      border-color: #edc970;
+      color: #5f3d04;
+    }
+
+    .provider-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .provider-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 13px;
+      background: var(--surface-soft);
+      display: grid;
+      gap: 8px;
+    }
+
+    .provider-card.active { border-color: #60a99e; box-shadow: 0 0 0 3px rgba(15,118,110,0.1); }
+    .provider-card h3 { margin: 0; font-size: 14px; }
+    .provider-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+    .field label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-weight: 780;
+    }
+
+    .status-line {
+      min-height: 28px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 0 2px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 20;
+      background: #17212b;
+      color: #ffffff;
+      border-radius: 8px;
+      padding: 11px 13px;
+      box-shadow: var(--shadow);
+      max-width: 440px;
+      font-size: 13px;
+      display: none;
+    }
+    .toast.show { display: block; }
+
+    .empty {
+      min-height: 180px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 24px;
+    }
+
+    .split-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .hidden { display: none !important; }
+
+    #view-issues.active,
+    #view-graph.active {
+      min-height: calc(100vh - 104px);
+    }
+
+    #view-issues .two-col,
+    #view-graph > .panel {
+      min-height: calc(100vh - 104px);
+    }
+
+    #view-issues .two-col {
+      align-items: stretch;
+    }
+
+    #view-issues .panel,
+    #view-graph > .panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    #view-issues aside.panel {
+      align-self: stretch;
+    }
+
+    #view-issues .table-wrap {
+      max-height: none;
+      min-height: 0;
+      height: 100%;
+    }
+
+    #view-issues #issues-detail {
+      overflow: auto;
+      min-height: 0;
+    }
+
+    #view-graph > .panel {
+      grid-template-rows: auto minmax(360px, 1fr) auto;
+    }
+
+    #view-graph .graph-layout,
+    #view-graph .graph-canvas,
+    #view-graph #graph-svg {
+      min-height: 0;
+      height: 100%;
+    }
+
+    #view-graph .raw {
+      max-height: 180px;
+    }
+
+    @media (max-width: 1120px) {
+      body { overflow: auto; }
+      .app-shell { grid-template-columns: 1fr; min-height: 100vh; height: auto; }
+      .sidebar { position: sticky; top: 0; z-index: 5; }
+      .brand { padding: 14px 16px; }
+      .nav { grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 8px; }
+      .nav button { grid-template-columns: 1fr; justify-items: center; font-size: 11px; padding: 8px 6px; }
+      .nav svg { width: 17px; height: 17px; }
+      .sidebar-footer { display: none; }
+      .topbar { grid-template-columns: 1fr; }
+      .command-row { justify-content: flex-start; }
+      .overview-grid, .two-col, .ai-layout, .graph-layout { grid-template-columns: 1fr; }
+      .graph-canvas { border-right: 0; border-bottom: 1px solid var(--border); }
+      .metrics, .tool-strip, .provider-grid, .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 640px) {
+      .workspace { padding: 10px; }
+      .project-control { grid-template-columns: 1fr; }
+      .metrics, .tool-strip, .provider-grid, .form-grid { grid-template-columns: 1fr; }
+      .nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .btn { width: 100%; }
+      .command-row, .split-actions, .toolbar { align-items: stretch; }
+      .table-wrap { max-height: none; }
     }
   </style>
 </head>
-<body class="min-h-screen">
-  <div id="app" class="max-w-6xl mx-auto px-6 py-10 space-y-8">
-    <header class="text-center space-y-3">
-      <p class="text-sky-400 text-sm font-semibold tracking-widest uppercase">PyShield</p>
-      <h1 class="text-3xl md:text-4xl font-bold text-white">Yapay Zeka Python Kod Analizi</h1>
-      <p class="text-slate-400 max-w-xl mx-auto text-sm md:text-base">
-        Bilgisayarınızdaki bir klasörü seçin; motor sözdizimi, halüsinasyon, güvenlik ve döngü risklerini otomatik tarar.
-      </p>
-    </header>
-
-    <section id="picker-section" class="flex flex-col items-center gap-4 py-8">
-      <button
-        id="btn-pick-folder"
-        type="button"
-        class="group relative px-10 py-5 rounded-2xl text-lg font-bold text-white bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 shadow-lg shadow-sky-900/40 transition transform hover:scale-[1.02] active:scale-[0.98]"
-      >
-        <span class="relative z-10">Analiz Edilecek Klasörü Seç</span>
-        <span class="absolute inset-0 rounded-2xl bg-white/10 opacity-0 group-hover:opacity-100 transition"></span>
-      </button>
-      <label class="glass rounded-xl px-4 py-3 text-left max-w-xl w-full flex flex-col gap-2">
-        <span class="text-xs uppercase font-semibold text-slate-400">Analiz Modu</span>
-        <select id="scan-mode" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100">
-          <option value="native">Hızlı Rust scan</option>
-          <option value="full">Tam toolchain scan</option>
-        </select>
-        <span class="text-xs text-slate-500">Hızlı mod sadece PyShield native kurallarını çalıştırır. Tam mod Ruff, Bandit, Pyright ve GitNexus status bilgisini de ekler.</span>
-      </label>
-      <p id="selected-path" class="text-slate-500 text-sm font-mono max-w-full truncate hidden"></p>
-    </section>
-
-    <section id="loading-section" class="hidden glass rounded-2xl p-10 text-center space-y-6">
-      <div class="relative w-24 h-24 mx-auto rounded-full border-2 border-sky-500/40 loader-ring flex items-center justify-center overflow-hidden">
-        <div class="absolute inset-0 scan-line"></div>
-        <svg class="w-10 h-10 text-sky-400 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" class="icon"><path fill="currentColor" d="M12 2 20 5.5v6.2c0 5-3.4 9.7-8 11.1-4.6-1.4-8-6.1-8-11.1V5.5L12 2Zm0 3.1L7 7.3v4.4c0 3.5 2.1 6.7 5 8 2.9-1.3 5-4.5 5-8V7.3l-5-2.2Z"/></svg>
+          </span>
+          <span>PyShield</span>
+        </div>
+        <small>Rust native analyzer, managed Python toolchain ve GitNexus graph workspace.</small>
       </div>
-      <p class="text-xl font-semibold text-sky-200">Yapay Zeka Kodları Taranıyor...</p>
-      <p class="text-slate-400 text-sm">Lütfen bekleyin, analiz paralel olarak çalışıyor.</p>
-    </section>
-
-    <section id="error-banner" class="hidden glass rounded-xl p-4 border border-rose-500/40 text-rose-300 text-sm"></section>
-
-    <section id="gitnexus-panel" class="hidden glass rounded-xl p-5 space-y-4">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-slate-600 pb-3">
-        <div>
-          <h2 class="text-lg font-bold">GitNexus Knowledge Graph</h2>
-          <p class="text-slate-400 text-sm">Seçili proje için local graph index durumu, indexleme ve execution-flow sorgusu.</p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button id="btn-gitnexus-status" type="button" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm font-semibold">Durumu Yenile</button>
-          <button id="btn-gitnexus-analyze" type="button" class="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-sm font-semibold text-white">Indexle</button>
-        </div>
-      </div>
-      <div id="gitnexus-status-box" class="rounded-lg bg-slate-950/70 border border-slate-700 p-3 text-sm text-slate-300">Klasör seçildikten sonra GitNexus durumu burada görünecek.</div>
-      <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
-        <input id="gitnexus-query-input" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100" type="search" placeholder="Örn: worker runtime flow, auth, database repository" />
-        <button id="btn-gitnexus-query" type="button" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white">Sorgula</button>
-      </div>
-      <pre id="gitnexus-output" class="hidden max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-black/40 border border-slate-800 p-3 text-xs text-slate-200"></pre>
-    </section>
-
-    <section id="results-section" class="hidden space-y-8">
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="glass rounded-xl p-5 border-l-4 border-sky-500">
-          <p class="text-slate-400 text-xs uppercase font-semibold">Taranan Dosya</p>
-          <p id="metric-files" class="text-4xl font-bold mt-1">0</p>
-        </div>
-        <div class="glass rounded-xl p-5 border-l-4 border-rose-500">
-          <p class="text-slate-400 text-xs uppercase font-semibold">Toplam Sorun</p>
-          <p id="metric-total" class="text-4xl font-bold mt-1">0</p>
-        </div>
-        <div class="glass rounded-xl p-5 border-l-4 border-emerald-500">
-          <p class="text-slate-400 text-xs uppercase font-semibold">Durum</p>
-          <p id="metric-status" class="text-2xl font-bold mt-2">—</p>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="glass rounded-xl p-5 text-center border border-rose-500/30 bg-rose-500/10">
-          <p id="card-syntax" class="text-4xl font-bold text-rose-400">0</p>
-          <p class="text-xs font-semibold uppercase tracking-wide text-rose-200/80 mt-2">Sözdizimi Hataları</p>
-        </div>
-        <div class="glass rounded-xl p-5 text-center border border-purple-500/30 bg-purple-500/10">
-          <p id="card-hallucination" class="text-4xl font-bold text-purple-400">0</p>
-          <p class="text-xs font-semibold uppercase tracking-wide text-purple-200/80 mt-2">Halüsinasyon Fonksiyonlar</p>
-        </div>
-        <div class="glass rounded-xl p-5 text-center border border-red-500/30 bg-red-500/10">
-          <p id="card-security" class="text-4xl font-bold text-red-400">0</p>
-          <p class="text-xs font-semibold uppercase tracking-wide text-red-200/80 mt-2">Güvenlik İhlalleri</p>
-        </div>
-        <div class="glass rounded-xl p-5 text-center border border-pink-500/30 bg-pink-500/10">
-          <p id="card-loops" class="text-4xl font-bold text-pink-400">0</p>
-          <p class="text-xs font-semibold uppercase tracking-wide text-pink-200/80 mt-2">Sonsuz Döngüler</p>
-        </div>
-      </div>
-
-      <div class="glass rounded-xl p-5">
-        <h2 class="text-lg font-bold mb-4 border-b border-slate-600 pb-2">Diğer Bulgular</h2>
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-          <div class="rounded-lg bg-slate-800/60 p-3 flex justify-between"><span>Eksik Import</span><span id="extra-imports" class="font-bold text-amber-400">0</span></div>
-          <div class="rounded-lg bg-slate-800/60 p-3 flex justify-between"><span>Tanımsız Değişken</span><span id="extra-undefined" class="font-bold text-orange-400">0</span></div>
-          <div class="rounded-lg bg-slate-800/60 p-3 flex justify-between"><span>Kullanılmayan Kod</span><span id="extra-unused" class="font-bold text-slate-300">0</span></div>
-        </div>
-      </div>
-
-      <div id="tool-status-section" class="glass rounded-xl p-5 hidden">
-        <h2 class="text-lg font-bold mb-4 border-b border-slate-600 pb-2">Araç Durumu</h2>
-        <div id="tool-status-list" class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm"></div>
-      </div>
-
-      <div class="glass rounded-xl p-5">
-        <h2 class="text-lg font-bold mb-4 border-b border-slate-600 pb-2">Filtreler</h2>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-          <label class="flex flex-col gap-1">
-            <span class="text-xs uppercase font-semibold text-slate-400">Severity</span>
-            <select id="filter-severity" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100"></select>
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class="text-xs uppercase font-semibold text-slate-400">Tool</span>
-            <select id="filter-tool" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100"></select>
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class="text-xs uppercase font-semibold text-slate-400">Kategori</span>
-            <select id="filter-category" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100"></select>
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class="text-xs uppercase font-semibold text-slate-400">Dosya</span>
-            <input id="filter-file" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-slate-100" type="search" placeholder="path içinde ara" />
-          </label>
-        </div>
-      </div>
-
-      <div class="glass rounded-xl overflow-hidden">
-        <div class="p-5 border-b border-slate-600">
-          <h2 class="text-lg font-bold">Hatalı Dosyalar</h2>
-          <p class="text-slate-400 text-sm mt-1">Detay için bir dosyaya tıklayın.</p>
-        </div>
-        <div id="file-accordion" class="divide-y divide-slate-700/50"></div>
-      </div>
-
-      <div class="text-center">
-        <button id="btn-new-scan" type="button" class="text-sky-400 hover:text-sky-300 text-sm font-semibold underline">
-          Yeni klasör tara
+      <nav class="nav" aria-label="Primary">
+        <button class="nav-btn active" data-view="overview">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v4h-7V4ZM4 13h7v7H4v-7Zm9-3h7v10h-7V10Z"/></svg>
+          <span>Overview</span>
         </button>
+        <button class="nav-btn" data-view="issues">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M11 3h2v11h-2V3Zm0 14h2v2h-2v-2ZM4 5h5v2H4V5Zm0 6h5v2H4v-2Zm0 6h5v2H4v-2Zm11-12h5v2h-5V5Zm0 6h5v2h-5v-2Zm0 6h5v2h-5v-2Z"/></svg>
+          <span>Issues</span>
+        </button>
+        <button class="nav-btn" data-view="graph">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 4a3 3 0 1 1-2.83 4H4a3 3 0 1 1 0-2h.17A3 3 0 0 1 7 4Zm10 10a3 3 0 0 1 2.83 2H21a3 3 0 1 1 0 2h-1.17A3 3 0 1 1 17 14ZM9.6 8.7l5.1 5.1-1.4 1.4-5.1-5.1 1.4-1.4Z"/></svg>
+          <span>GitNexus</span>
+        </button>
+        <button class="nav-btn" data-view="ai">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M11 2h2v3h-2V2Zm6.95 3.64 1.41 1.41-2.12 2.12-1.41-1.41 2.12-2.12ZM4.64 7.05l1.41-1.41 2.12 2.12-1.41 1.41-2.12-2.12ZM3 11h3v2H3v-2Zm15 0h3v2h-3v-2ZM7 11a5 5 0 1 1 8.5 3.57c-.75.7-1.1 1.35-1.1 2.43V18H9.6v-1c0-1.08-.35-1.73-1.1-2.43A4.96 4.96 0 0 1 7 11Zm3 10v-2h4v2h-4Z"/></svg>
+          <span>AI Workbench</span>
+        </button>
+        <button class="nav-btn" data-view="settings">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="m19.43 12.98.04-.98-.04-.98 2.11-1.65-2-3.46-2.49 1a7.62 7.62 0 0 0-1.7-.98L15 3h-4l-.35 2.93c-.61.24-1.18.56-1.7.98l-2.49-1-2 3.46 2.11 1.65-.04.98.04.98-2.11 1.65 2 3.46 2.49-1c.52.42 1.09.74 1.7.98L11 21h4l.35-2.93c.61-.24 1.18-.56 1.7-.98l2.49 1 2-3.46-2.11-1.65ZM13 15.7A3.7 3.7 0 1 1 13 8a3.7 3.7 0 0 1 0 7.4Z"/></svg>
+          <span>Settings</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="sidebar-status">Hazır</div>
       </div>
-    </section>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="project-control">
+          <input id="project-path" class="input" value="D:\PROGRAMMING\abey" aria-label="Project path" />
+          <button id="btn-pick-folder" class="btn" type="button" title="Klasör seç">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10 4 12 6h8v14H4V4h6Zm9 5H5v10h14V9Z"/></svg>
+            Seç
+          </button>
+        </div>
+        <div class="command-row">
+          <div id="scan-targets" class="scan-targets" role="group" aria-label="Scan target">
+            <button class="scan-target active" type="button" data-scan-target="native">Native</button>
+            <button class="scan-target" type="button" data-scan-target="full">Full</button>
+            <button class="scan-target" type="button" data-scan-target="ruff">Ruff</button>
+            <button class="scan-target" type="button" data-scan-target="bandit">Bandit</button>
+            <button class="scan-target" type="button" data-scan-target="pyright">Pyright</button>
+            <button class="scan-target" type="button" data-scan-target="gitnexus">GitNexus</button>
+          </div>
+          <button id="btn-run-scan" class="btn primary" type="button">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="m10 17 6-5-6-5v10ZM4 4h2v16H4V4Zm16 0h-2v16h2V4Z"/></svg>
+            Run Scan
+          </button>
+          <button id="btn-git-status-top" class="btn icon-only" type="button" title="GitNexus status">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.05-4.95L14 10h7V3l-2.63 2.63A8.96 8.96 0 0 0 12 3Z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <div id="view-overview" class="view active">
+          <div class="grid metrics">
+            <section class="panel metric">
+              <span>Dosya</span>
+              <strong id="metric-files">0</strong>
+              <em id="metric-project">Proje bekliyor</em>
+            </section>
+            <section class="panel metric">
+              <span>Toplam Bulgu</span>
+              <strong id="metric-total">0</strong>
+              <em id="metric-status">Scan yok</em>
+            </section>
+            <section class="panel metric">
+              <span>Kritik</span>
+              <strong id="metric-critical">0</strong>
+              <em>Sözdizimi + güvenlik</em>
+            </section>
+            <section class="panel metric">
+              <span>Toolchain</span>
+              <strong id="metric-tools">0/5</strong>
+              <em id="metric-tools-note">Durum bekliyor</em>
+            </section>
+          </div>
+
+          <div class="grid overview-grid" style="margin-top:14px">
+            <div class="grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2 class="panel-title">Toolchain Status</h2>
+                    <p class="panel-subtitle">PyShield native, Ruff, Bandit, Pyright ve GitNexus görünürlüğü.</p>
+                  </div>
+                  <button id="btn-refresh-status" class="btn" type="button">Status</button>
+                </div>
+                <div class="panel-body">
+                  <div id="tool-strip" class="tool-strip"></div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2 class="panel-title">Issue Triage</h2>
+                    <p class="panel-subtitle"><span id="issue-count-label">0</span> bulgu filtreleniyor.</p>
+                  </div>
+                  <div class="toolbar">
+                    <select id="filter-severity" class="select"><option value="">Severity</option></select>
+                    <select id="filter-tool" class="select"><option value="">Tool</option></select>
+                    <input id="filter-text" class="input" placeholder="Dosya, kural veya mesaj" />
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Severity</th>
+                        <th>Tool</th>
+                        <th>Rule</th>
+                        <th>File</th>
+                        <th>Line</th>
+                        <th>Message</th>
+                      </tr>
+                    </thead>
+                    <tbody id="overview-issues"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+
+            <div class="grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2 class="panel-title">GitNexus Health</h2>
+                    <p class="panel-subtitle">Index, query warning ve rebuild aksiyonları.</p>
+                  </div>
+                </div>
+                <div class="panel-body detail-block">
+                  <div id="gitnexus-status-card" class="status-line">Status bekliyor</div>
+                  <div class="split-actions">
+                    <button id="btn-git-status" class="btn" type="button">Status</button>
+                    <button id="btn-git-index" class="btn" type="button">Index</button>
+                    <button id="btn-git-force-index" class="btn warning" type="button">Force Rebuild</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2 class="panel-title">Selected Issue</h2>
+                    <p class="panel-subtitle">Dosya, snippet ve fix hint.</p>
+                  </div>
+                </div>
+                <div id="issue-detail" class="panel-body detail-block">
+                  <div class="empty">Issue seçilmedi.</div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div id="view-issues" class="view">
+          <div class="grid two-col">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 class="panel-title">All Issues</h2>
+                  <p class="panel-subtitle">Severity, tool, rule ve path üzerinden operasyonel triage.</p>
+                </div>
+                <div class="toolbar">
+                  <select id="issues-severity" class="select"><option value="">Severity</option></select>
+                  <select id="issues-tool" class="select"><option value="">Tool</option></select>
+                  <select id="issues-category" class="select"><option value="">Category</option></select>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Severity</th>
+                      <th>Category</th>
+                      <th>Tool</th>
+                      <th>Rule</th>
+                      <th>File</th>
+                      <th>Line</th>
+                      <th>Message</th>
+                    </tr>
+                  </thead>
+                  <tbody id="issues-table"></tbody>
+                </table>
+              </div>
+            </section>
+            <aside class="panel">
+              <div class="panel-header">
+                <h2 class="panel-title">Inspector</h2>
+              </div>
+              <div id="issues-detail" class="panel-body detail-block">
+                <div class="empty">Bir bulgu seçin.</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div id="view-graph" class="view">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">GitNexus Graph</h2>
+                <p class="panel-subtitle">CLI query JSON çıktısından node, edge ve warning görünümü.</p>
+              </div>
+              <div class="toolbar">
+                <input id="git-query" class="input" value="GraphRAG" />
+                <select id="git-limit" class="select">
+                  <option value="6">6</option>
+                  <option value="12" selected>12</option>
+                  <option value="24">24</option>
+                </select>
+                <button id="btn-git-query" class="btn primary" type="button">Query</button>
+              </div>
+            </div>
+            <div class="graph-layout">
+              <div class="graph-canvas">
+                <svg id="graph-svg" viewBox="0 0 900 560" role="img" aria-label="GitNexus graph"></svg>
+              </div>
+              <aside class="inspector">
+                <h2 class="panel-title">Graph Inspector</h2>
+                <div id="graph-inspector" class="detail-block" style="margin-top:12px">
+                  <div class="empty">Node seçilmedi.</div>
+                </div>
+              </aside>
+            </div>
+            <div class="panel-body">
+              <pre id="git-raw" class="raw">GitNexus query bekliyor.</pre>
+            </div>
+          </section>
+        </div>
+
+        <div id="view-ai" class="view">
+          <div class="ai-layout">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 class="panel-title">AI Workbench</h2>
+                  <p class="panel-subtitle">Konu gir, GitNexus query çalışsın, seçili model özetlesin.</p>
+                </div>
+              </div>
+              <div class="panel-body detail-block">
+                <div class="field">
+                  <label for="ai-provider">Provider</label>
+                  <select id="ai-provider" class="select"></select>
+                </div>
+                <div class="field">
+                  <label for="ai-prompt">Konu</label>
+                  <textarea id="ai-prompt" class="textarea">GraphRAG akışı ve riskli bağlantıları çıkar</textarea>
+                </div>
+                <button id="btn-ai-query" class="btn primary" type="button">
+                  <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3 3 7l9 4 9-4-9-4Zm-7 8 7 3 7-3v5l-7 4-7-4v-5Z"/></svg>
+                  Run AI + GitNexus
+                </button>
+                <div id="ai-provider-state" class="status-line">Provider ayarı bekliyor.</div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 class="panel-title">AI Result</h2>
+                  <p id="ai-result-meta" class="panel-subtitle">Yanıt bekliyor.</p>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div id="ai-answer" class="answer">AI/GitNexus workflow henüz çalışmadı.</div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div id="view-settings" class="view">
+          <div class="grid">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 class="panel-title">Provider Settings</h2>
+                  <p class="panel-subtitle">API anahtarları yerel settings.sqlite içinde saklanır; UI anahtarı geri okumaz.</p>
+                </div>
+                <button id="btn-provider-refresh" class="btn" type="button">Refresh</button>
+              </div>
+              <div class="panel-body">
+                <div id="provider-cards" class="provider-grid"></div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h2 class="panel-title">Edit Provider</h2>
+                <span id="settings-status" class="badge muted">Hazır</span>
+              </div>
+              <div class="panel-body">
+                <div class="form-grid">
+                  <div class="field">
+                    <label for="settings-provider">Provider</label>
+                    <select id="settings-provider" class="select"></select>
+                  </div>
+                  <div class="field">
+                    <label for="settings-model">Model</label>
+                    <input id="settings-model" class="input" list="settings-model-list" />
+                    <datalist id="settings-model-list"></datalist>
+                  </div>
+                  <div class="field">
+                    <label for="settings-base-url">Base URL</label>
+                    <input id="settings-base-url" class="input" />
+                  </div>
+                  <div class="field">
+                    <label for="settings-api-key">API Key</label>
+                    <input id="settings-api-key" class="input" type="password" autocomplete="off" placeholder="Yeni anahtar veya boş bırak" />
+                  </div>
+                </div>
+                <div class="split-actions" style="margin-top:14px">
+                  <button id="btn-provider-delete" class="btn danger" type="button">Delete Key</button>
+                  <button id="btn-provider-save" class="btn primary" type="button">Save Provider</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
+  <div id="toast" class="toast"></div>
 
   <script>
     const $ = (id) => document.getElementById(id);
-    let currentReport = null;
-    let currentFolderPath = null;
+    const state = {
+      report: null,
+      issues: [],
+      selectedIssueKey: null,
+      selectedGraphNode: null,
+      providers: [],
+      activeProvider: 'openai',
+      graph: { nodes: [], edges: [], raw: '' },
+      scanTarget: 'native',
+      lastScanTools: [],
+      busy: false,
+    };
 
-    function getTauri() {
+    const SVG = {
+      overview: '<svg viewBox="0 0 24 24" class="icon"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v4h-7V4ZM4 13h7v7H4v-7Zm9-3h7v10h-7V10Z"/></svg>',
+      play: '<svg viewBox="0 0 24 24" class="icon"><path fill="currentColor" d="M8 5v14l11-7L8 5Z"/></svg>',
+    };
+
+    function tauriApi() {
       return window.__TAURI__;
     }
 
-    function showError(msg) {
-      const el = $('error-banner');
-      el.textContent = msg;
-      el.classList.remove('hidden');
+    function hasTauriApi() {
+      return Boolean(tauriApi()?.core?.invoke);
     }
 
-    function hideError() {
-      $('error-banner').classList.add('hidden');
+    async function invoke(command, args = {}) {
+      const api = tauriApi();
+      if (!api?.core?.invoke) {
+        throw new Error('Tauri API yok. Uygulamayı npm run tauri dev veya npm run tauri build ile çalıştırın.');
+      }
+      return api.core.invoke(command, args);
     }
 
-    function setLoading(on) {
-      $('loading-section').classList.toggle('hidden', !on);
-      $('picker-section').classList.toggle('hidden', on);
-      $('results-section').classList.add('hidden');
-      hideError();
+    function toast(message) {
+      const el = $('toast');
+      el.textContent = message;
+      el.classList.add('show');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => el.classList.remove('show'), 3600);
     }
 
-    function selectedScanUsesExternalTools() {
-      return $('scan-mode').value === 'full';
+    function setBusy(on, label = 'Çalışıyor') {
+      state.busy = on;
+      $('sidebar-status').textContent = on ? label : 'Hazır';
+      document.querySelectorAll('.btn, .scan-target, .input, .select, .textarea').forEach((el) => {
+        if (el.id === 'filter-text') return;
+        el.disabled = on;
+      });
+    }
+
+    function projectPath() {
+      return $('project-path').value.trim();
+    }
+
+    function selectedScanTools() {
+      switch (state.scanTarget) {
+        case 'full':
+          return ['full'];
+        case 'ruff':
+        case 'bandit':
+        case 'pyright':
+        case 'gitnexus':
+          return [state.scanTarget];
+        case 'native':
+        default:
+          return ['native'];
+      }
+    }
+
+    function selectScanTarget(target) {
+      state.scanTarget = target || 'native';
+      localStorage.setItem('pyshield.scanTarget', state.scanTarget);
+      document.querySelectorAll('.scan-target').forEach((button) => {
+        button.classList.toggle('active', button.dataset.scanTarget === state.scanTarget);
+      });
     }
 
     function escapeHtml(text) {
       const d = document.createElement('div');
-      d.textContent = text;
+      d.textContent = text == null ? '' : String(text);
       return d.innerHTML;
     }
 
-    /** ErrorSummary / ErrorBreakdown serde alanları (snake_case JSON). */
-    const SUMMARY_TO_CARD = [
-      ['syntax_errors', 'card-syntax'],
-      ['hallucinations', 'card-hallucination'],
-      ['security_issues', 'card-security'],
-      ['infinite_loops', 'card-loops'],
-    ];
-    const SUMMARY_TO_EXTRA = [
-      ['missing_imports', 'extra-imports'],
-      ['undefined_variables', 'extra-undefined'],
-      ['unused_code', 'extra-unused'],
-    ];
-
-    function parseAnalysisReport(raw) {
-      if (raw == null) return null;
-      if (typeof raw === 'object') return raw;
-      if (typeof raw === 'string') return JSON.parse(raw);
-      return null;
+    function parseJson(raw) {
+      if (raw && typeof raw === 'object') return raw;
+      if (typeof raw !== 'string') return null;
+      try { return JSON.parse(raw); } catch { return null; }
     }
 
-    function countFromSummary(summary, field) {
-      const n = summary?.[field];
-      return typeof n === 'number' && !Number.isNaN(n) ? n : 0;
+    function asArray(value) {
+      return Array.isArray(value) ? value : [];
     }
 
-    function uniqueSorted(values) {
-      return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    function severityClass(severity) {
+      const value = String(severity || '').toUpperCase();
+      if (value === 'ERROR') return 'error';
+      if (value === 'WARNING') return 'warning';
+      return 'info';
     }
 
-    function fillSelect(id, values, allLabel) {
+    function severityRank(severity) {
+      const value = String(severity || '').toUpperCase();
+      if (value === 'ERROR') return 0;
+      if (value === 'WARNING') return 1;
+      return 2;
+    }
+
+    function unique(values) {
+      return [...new Set(values.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+    }
+
+    function fillSelect(id, values, label) {
       const select = $(id);
-      const previous = select.value;
-      select.innerHTML = `<option value="">${escapeHtml(allLabel)}</option>` +
+      const old = select.value;
+      select.innerHTML = `<option value="">${escapeHtml(label)}</option>` +
         values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
-      if ([...select.options].some((option) => option.value === previous)) {
-        select.value = previous;
+      if ([...select.options].some((option) => option.value === old)) select.value = old;
+    }
+
+    function issueKey(issue) {
+      return [issue.file_path, issue.tool, issue.rule_id, issue.line, issue.column, issue.message].join('|');
+    }
+
+    function flattenIssues(report) {
+      return asArray(report?.files).flatMap((file) =>
+        asArray(file.issues).map((issue) => ({
+          ...issue,
+          file_path: issue.file_path || file.file_path,
+          file_total_errors: file.total_errors,
+          file_breakdown: file.error_breakdown,
+          key: issueKey({ ...issue, file_path: issue.file_path || file.file_path }),
+        }))
+      ).sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+    }
+
+    function applyIssueFilters(source = state.issues, prefix = 'filter') {
+      const severity = $(`${prefix}-severity`)?.value || '';
+      const tool = $(`${prefix}-tool`)?.value || '';
+      const category = $(`${prefix}-category`)?.value || '';
+      const text = $('filter-text')?.value.trim().toLowerCase() || '';
+      return source.filter((issue) => {
+        if (severity && issue.severity !== severity) return false;
+        if (tool && issue.tool !== tool) return false;
+        if (category && issue.category !== category) return false;
+        if (text) {
+          const haystack = [issue.file_path, issue.rule_id, issue.category, issue.message, issue.code_snippet].join(' ').toLowerCase();
+          if (!haystack.includes(text)) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderMetrics(report) {
+      const summary = report?.summary || {};
+      const critical = (summary.syntax_errors || 0) + (summary.security_issues || 0);
+      $('metric-files').textContent = report?.total_files_scanned ?? 0;
+      $('metric-total').textContent = report?.total_errors_found ?? 0;
+      $('metric-critical').textContent = critical;
+      $('metric-status').textContent = report?.analysis_status || 'Scan yok';
+      $('metric-project').textContent = projectPath() ? shortPath(projectPath()) : 'Proje bekliyor';
+
+      const statuses = normalizedToolStatuses(report);
+      const okCount = statuses.filter((s) => s.status === 'ok').length;
+      $('metric-tools').textContent = `${okCount}/${statuses.length}`;
+      $('metric-tools-note').textContent = statuses.some((s) => s.status === 'error' || s.status === 'unavailable')
+        ? 'Aksiyon gerekli'
+        : 'Araçlar hazır';
+    }
+
+    function normalizedToolStatuses(report = state.report) {
+      const statuses = asArray(report?.tool_statuses).map((status) => ({
+        tool: status.tool || 'tool',
+        status: status.status || (status.available ? 'ok' : 'unavailable'),
+        available: Boolean(status.available),
+        message: status.message || '',
+        issue_count: status.issue_count || 0,
+      }));
+      const known = new Map(statuses.map((status) => [status.tool.toLowerCase(), status]));
+      const nativeRan = state.lastScanTools.includes('native') || state.lastScanTools.includes('full');
+      if (!known.has('pyshield')) {
+        statuses.unshift({
+          tool: 'pyshield',
+          status: report && nativeRan ? 'ok' : report ? 'not_run' : 'idle',
+          available: true,
+          message: report && nativeRan ? `${report.total_files_scanned || 0} dosya native scan` : report ? 'Bu çalıştırmada seçilmedi' : 'Native Rust analyzer hazır',
+          issue_count: report?.total_errors_found || 0,
+        });
       }
-    }
-
-    function setupFilters(data) {
-      const issues = (data.files || []).flatMap((file) => Array.isArray(file.issues) ? file.issues : []);
-      fillSelect('filter-severity', uniqueSorted(issues.map((issue) => issue.severity || 'INFO')), 'Tümü');
-      fillSelect('filter-tool', uniqueSorted(issues.map((issue) => issue.tool || 'pyshield')), 'Tümü');
-      fillSelect('filter-category', uniqueSorted(issues.map((issue) => issue.category || 'Bulgu')), 'Tümü');
-    }
-
-    function issueMatchesFilters(issue, filePath) {
-      const severity = $('filter-severity').value;
-      const tool = $('filter-tool').value;
-      const category = $('filter-category').value;
-      const fileQuery = $('filter-file').value.trim().toLowerCase();
-
-      if (severity && (issue.severity || 'INFO') !== severity) return false;
-      if (tool && (issue.tool || 'pyshield') !== tool) return false;
-      if (category && (issue.category || 'Bulgu') !== category) return false;
-      if (fileQuery && !String(filePath || '').toLowerCase().includes(fileQuery)) return false;
-      return true;
-    }
-
-    function renderToolStatuses(statuses = []) {
-      const section = $('tool-status-section');
-      const list = $('tool-status-list');
-      if (!statuses.length) {
-        section.classList.add('hidden');
-        list.innerHTML = '';
-        return;
+      for (const name of ['ruff', 'bandit', 'pyright', 'gitnexus']) {
+        if (!statuses.some((status) => status.tool.toLowerCase() === name)) {
+          statuses.push({
+            tool: name,
+            status: report ? 'not_run' : 'idle',
+            available: false,
+            message: report ? 'Native scan modunda çalışmadı' : 'Durum bekliyor',
+            issue_count: 0,
+          });
+        }
       }
+      return statuses.slice(0, 5);
+    }
 
-      section.classList.remove('hidden');
-      list.innerHTML = statuses.map((status) => {
-        const ok = status.available && status.status === 'ok';
-        const cls = ok
-          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-          : 'border-amber-500/30 bg-amber-500/10 text-amber-200';
-        const message = status.message || `${status.issue_count || 0} bulgu`;
-        return `
-          <div class="rounded-lg border ${cls} p-3">
-            <div class="flex items-center justify-between gap-2">
-              <span class="font-bold">${escapeHtml(status.tool || 'tool')}</span>
-              <span class="text-xs uppercase">${escapeHtml(status.status || 'unknown')}</span>
-            </div>
-            <p class="mt-1 text-xs opacity-90">${escapeHtml(message)}</p>
-          </div>`;
+    function renderToolStrip(report = state.report) {
+      $('tool-strip').innerHTML = normalizedToolStatuses(report).map((status) => {
+        const cls = status.status === 'ok' ? 'ok' : status.status === 'idle' || status.status === 'not_run' ? 'muted' : 'warning';
+        return `<div class="tool-item">
+          <strong>${escapeHtml(status.tool)}</strong>
+          <span class="badge ${cls}">${escapeHtml(status.status)}</span>
+          <small>${escapeHtml(status.message || `${status.issue_count} bulgu`)}</small>
+        </div>`;
       }).join('');
     }
 
-    function renderGitNexusStatus(status) {
-      const box = $('gitnexus-status-box');
-      const ok = status?.available && status?.status === 'ok';
-      const cls = ok
-        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-        : 'border-amber-500/30 bg-amber-500/10 text-amber-200';
-      box.className = `rounded-lg border ${cls} p-3 text-sm`;
-      box.textContent = `${status?.tool || 'gitnexus'}: ${status?.status || 'unknown'}${status?.message ? ' | ' + status.message : ''}`;
+    function renderFilterOptions() {
+      const severities = unique(state.issues.map((issue) => issue.severity));
+      const tools = unique(state.issues.map((issue) => issue.tool));
+      const categories = unique(state.issues.map((issue) => issue.category));
+      fillSelect('filter-severity', severities, 'Severity');
+      fillSelect('filter-tool', tools, 'Tool');
+      fillSelect('issues-severity', severities, 'Severity');
+      fillSelect('issues-tool', tools, 'Tool');
+      fillSelect('issues-category', categories, 'Category');
     }
 
-    async function refreshGitNexusStatus() {
-      const tauri = getTauri();
-      if (!currentFolderPath || !tauri?.core?.invoke) return;
-      $('gitnexus-panel').classList.remove('hidden');
-      $('gitnexus-status-box').textContent = 'GitNexus durumu okunuyor...';
-      try {
-        const raw = await tauri.core.invoke('run_gitnexus_status', { folderPath: currentFolderPath });
-        renderGitNexusStatus(parseAnalysisReport(raw));
-      } catch (e) {
-        renderGitNexusStatus({ tool: 'gitnexus', available: true, status: 'error', message: e?.message || String(e) });
+    function renderIssueRows(targetId, issues, limit = Infinity) {
+      const body = $(targetId);
+      const visible = issues.slice(0, limit);
+      if (!visible.length) {
+        const colspan = targetId === 'issues-table' ? 7 : 6;
+        body.innerHTML = `<tr><td colspan="${colspan}"><div class="empty">Filtreye uyan bulgu yok.</div></td></tr>`;
+        return;
       }
+      body.innerHTML = visible.map((issue) => {
+        const selected = issue.key === state.selectedIssueKey ? 'selected' : '';
+        const categoryCell = targetId === 'issues-table' ? `<td>${escapeHtml(issue.category || '')}</td>` : '';
+        return `<tr class="${selected}" data-issue-key="${escapeHtml(issue.key)}">
+          <td><span class="badge ${severityClass(issue.severity)}">${escapeHtml(issue.severity || 'INFO')}</span></td>
+          ${categoryCell}
+          <td>${escapeHtml(issue.tool || 'pyshield')}</td>
+          <td>${escapeHtml(issue.rule_id || '')}</td>
+          <td class="path-cell" title="${escapeHtml(issue.file_path || '')}">${escapeHtml(shortPath(issue.file_path || ''))}</td>
+          <td>${escapeHtml(issue.line || 1)}</td>
+          <td class="message-cell" title="${escapeHtml(issue.message || '')}"><span class="message-preview">${escapeHtml(issue.message || '')}</span></td>
+        </tr>`;
+      }).join('');
+
+      body.querySelectorAll('tr[data-issue-key]').forEach((row) => {
+        row.addEventListener('click', () => selectIssue(row.dataset.issueKey));
+      });
     }
 
-    async function runGitNexusAnalyze() {
-      const tauri = getTauri();
-      if (!currentFolderPath || !tauri?.core?.invoke) return;
-      const output = $('gitnexus-output');
-      output.classList.remove('hidden');
-      output.textContent = 'GitNexus index-only analiz çalışıyor...';
-      try {
-        const text = await tauri.core.invoke('run_gitnexus_analyze', { folderPath: currentFolderPath });
-        output.textContent = text || 'GitNexus analyze tamamlandı.';
-        await refreshGitNexusStatus();
-      } catch (e) {
-        output.textContent = 'GitNexus analyze hatası: ' + (e?.message || String(e));
-      }
+    function renderIssues() {
+      const overviewIssues = applyIssueFilters(state.issues, 'filter');
+      const issuesView = applyIssueFilters(state.issues, 'issues');
+      $('issue-count-label').textContent = overviewIssues.length;
+      renderIssueRows('overview-issues', overviewIssues, 80);
+      renderIssueRows('issues-table', issuesView, 500);
+      renderIssueDetail();
     }
 
-    async function runGitNexusQuery() {
-      const tauri = getTauri();
-      const query = $('gitnexus-query-input').value.trim();
-      if (!currentFolderPath || !query || !tauri?.core?.invoke) return;
-      const output = $('gitnexus-output');
-      output.classList.remove('hidden');
-      output.textContent = 'GitNexus sorgusu çalışıyor...';
-      try {
-        output.textContent = await tauri.core.invoke('run_gitnexus_query', { folderPath: currentFolderPath, query });
-      } catch (e) {
-        output.textContent = 'GitNexus query hatası: ' + (e?.message || String(e));
-      }
+    function selectIssue(key) {
+      state.selectedIssueKey = key;
+      renderIssues();
     }
 
-    function formatFileBreakdown(b) {
-      if (!b) return '';
-      const parts = [];
-      if (b.syntax_errors) parts.push(`Sözdizimi ${b.syntax_errors}`);
-      if (b.hallucinations) parts.push(`Halüsinasyon ${b.hallucinations}`);
-      if (b.security_issues) parts.push(`Güvenlik ${b.security_issues}`);
-      if (b.infinite_loops) parts.push(`Döngü ${b.infinite_loops}`);
-      if (b.missing_imports) parts.push(`Import ${b.missing_imports}`);
-      if (b.undefined_variables) parts.push(`Tanımsız ${b.undefined_variables}`);
-      if (b.unused_code) parts.push(`Kullanılmayan ${b.unused_code}`);
-      return parts.join(' · ');
+    function selectedIssue() {
+      return state.issues.find((issue) => issue.key === state.selectedIssueKey) || null;
     }
 
-    function issueAccentClass(category = '') {
-      return /Güvenlik|Sözdizimi|Security|Syntax/i.test(category)
-        ? 'border-l-rose-500'
-        : 'border-l-amber-400';
+    function renderIssueDetail() {
+      const issue = selectedIssue();
+      const html = issue ? issueDetailHtml(issue) : '<div class="empty">Issue seçilmedi.</div>';
+      $('issue-detail').innerHTML = html;
+      $('issues-detail').innerHTML = html;
     }
 
-    function renderIssueCard(issue) {
-      const category = issue.category || 'Bulgu';
-      const severity = issue.severity || 'INFO';
-      const tool = issue.tool || 'pyshield';
-      const ruleId = issue.rule_id || '';
-      const fixHint = issue.fix_hint || '';
-      const line = issue.line ?? 0;
-      const column = issue.column ?? 0;
-      const snippet = issue.code_snippet || '';
-      const message = issue.message || 'Açıklama yok.';
-
+    function issueDetailHtml(issue) {
       return `
-        <article class="rounded-lg border border-slate-700/70 ${issueAccentClass(category)} border-l-4 bg-slate-900/70 p-4">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <span class="text-xs font-bold uppercase tracking-wide text-slate-300">${escapeHtml(severity)} · ${escapeHtml(category)}</span>
-            <span class="text-xs font-semibold text-slate-400">Satır ${line}, Sütun ${column}</span>
-          </div>
-          <p class="mt-2 text-xs font-mono text-slate-500">${escapeHtml(tool)}${ruleId ? ` · ${escapeHtml(ruleId)}` : ''}</p>
-          <pre class="mt-3 bg-slate-950 font-mono p-2 rounded text-xs text-emerald-400 whitespace-pre-wrap overflow-x-auto">${escapeHtml(snippet || '(kod satırı alınamadı)')}</pre>
-          <p class="mt-3 text-sm text-slate-300 leading-relaxed">${escapeHtml(message)}</p>
-          ${fixHint ? `<p class="mt-2 text-sm text-sky-200 leading-relaxed">${escapeHtml(fixHint)}</p>` : ''}
-        </article>`;
+        <div class="kv"><span>Severity</span><strong><span class="badge ${severityClass(issue.severity)}">${escapeHtml(issue.severity || 'INFO')}</span></strong></div>
+        <div class="kv"><span>Tool</span><strong>${escapeHtml(issue.tool || 'pyshield')}</strong></div>
+        <div class="kv"><span>Rule</span><strong>${escapeHtml(issue.rule_id || '')}</strong></div>
+        <div class="kv"><span>Category</span><strong>${escapeHtml(issue.category || '')}</strong></div>
+        <div class="kv"><span>Location</span><strong>${escapeHtml(shortPath(issue.file_path || ''))}:${escapeHtml(issue.line || 1)}</strong></div>
+        <div class="code">${escapeHtml(issue.code_snippet || '(snippet yok)')}</div>
+        <p>${escapeHtml(issue.message || '')}</p>
+        ${issue.fix_hint ? `<p><strong>Fix:</strong> ${escapeHtml(issue.fix_hint)}</p>` : ''}
+      `;
     }
 
-    function renderReport(data) {
-      currentReport = data;
-      const s = data.summary || {};
-      $('metric-files').textContent = data.total_files_scanned ?? 0;
-      $('metric-total').textContent = data.total_errors_found ?? 0;
-      $('metric-status').textContent = data.analysis_status ?? '—';
-      setupFilters(data);
-      renderToolStatuses(data.tool_statuses || []);
+    function shortPath(path) {
+      const text = String(path || '');
+      const normalized = text.replaceAll('\\\\', '/').replaceAll('\\', '/');
+      const parts = normalized.split('/').filter(Boolean);
+      if (parts.length <= 3) return text;
+      return parts.slice(-3).join('/');
+    }
 
-      for (const [field, elId] of SUMMARY_TO_CARD) {
-        $(elId).textContent = countFromSummary(s, field);
+    async function pickFolder() {
+      const api = tauriApi();
+      if (!api?.dialog?.open) {
+        toast('Tauri dialog API yok.');
+        return;
       }
-      for (const [field, elId] of SUMMARY_TO_EXTRA) {
-        $(elId).textContent = countFromSummary(s, field);
+      const selected = await api.dialog.open({ directory: true, multiple: false, title: 'Analiz edilecek klasör' });
+      if (!selected) return;
+      $('project-path').value = Array.isArray(selected) ? selected[0] : selected;
+      localStorage.setItem('pyshield.projectPath', $('project-path').value);
+      renderMetrics(state.report);
+    }
+
+    async function runScan() {
+      const folderPath = projectPath();
+      if (!folderPath) return toast('Proje path boş.');
+      localStorage.setItem('pyshield.projectPath', folderPath);
+      setBusy(true, 'Scan çalışıyor');
+      try {
+        const selectedTools = selectedScanTools();
+        const raw = await invoke('run_analysis_on_folder', { folderPath, selectedTools });
+        const report = parseJson(raw);
+        if (!report?.summary) throw new Error('Analiz yanıtında summary yok.');
+        state.lastScanTools = selectedTools;
+        state.report = report;
+        state.issues = flattenIssues(report);
+        state.selectedIssueKey = state.issues[0]?.key || null;
+        renderAll();
+        toast(`${selectedTools.join(', ')} scan tamamlandı: ${state.issues.length} bulgu`);
+      } catch (error) {
+        toast(`Scan hatası: ${error.message || error}`);
+      } finally {
+        setBusy(false);
       }
+    }
 
-      const accordion = $('file-accordion');
-      accordion.innerHTML = '';
+    async function runGitStatus() {
+      const folderPath = projectPath();
+      if (!folderPath) return toast('Proje path boş.');
+      setBusy(true, 'GitNexus status');
+      try {
+        const raw = await invoke('run_gitnexus_status', { folderPath });
+        const status = parseJson(raw);
+        renderGitStatus(status);
+        toast('GitNexus status güncellendi');
+      } catch (error) {
+        renderGitStatus({ tool: 'gitnexus', status: 'error', available: true, message: error.message || String(error) });
+      } finally {
+        setBusy(false);
+      }
+    }
 
-      const files = (data.files || [])
-        .map((file) => ({
-          ...file,
-          issues: Array.isArray(file.issues)
-            ? file.issues.filter((issue) => issueMatchesFilters(issue, file.file_path))
-            : [],
-        }))
-        .filter((file) => file.issues.length > 0);
-      if (files.length === 0) {
-        accordion.innerHTML = '<p class="p-6 text-emerald-400 text-sm">Filtreye uyan bulgu yok.</p>';
-      } else {
-        files.forEach((file, i) => {
-          const id = `acc-${i}`;
-          const issues = Array.isArray(file.issues) ? file.issues : [];
-          const details = issues.length
-            ? issues.map(renderIssueCard).join('')
-            : `<pre class="font-mono text-xs text-slate-300 whitespace-pre-wrap overflow-x-auto">${escapeHtml(file.output_buffer || 'Detay yok.')}</pre>`;
-          const breakdown = formatFileBreakdown(file.error_breakdown);
-          const row = document.createElement('div');
-          row.innerHTML = `
-            <button type="button" data-acc="${id}" class="acc-toggle w-full text-left px-5 py-4 hover:bg-slate-800/50 flex items-center justify-between gap-4">
-              <div class="flex flex-col gap-1 min-w-0 flex-1">
-                <div class="flex items-center gap-3 min-w-0">
-                  <span class="shrink-0 px-2 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${issues.length} sorun</span>
-                  <span class="font-mono text-sm text-slate-200 truncate">${escapeHtml(file.file_path)}</span>
-                </div>
-                ${breakdown ? `<p class="text-xs text-slate-400 truncate pl-0.5">${escapeHtml(breakdown)}</p>` : ''}
-              </div>
-              <svg class="w-5 h-5 text-slate-400 shrink-0 acc-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-            </button>
-            <div id="${id}" class="accordion-panel border-t border-slate-700/50 bg-slate-900/40 px-5 py-4">
-              <div class="space-y-3">${details}</div>
-            </div>`;
-          accordion.appendChild(row);
-        });
+    function renderGitStatus(status) {
+      const cls = status?.status === 'ok' ? 'ok' : status?.status === 'not_indexed' ? 'warning' : 'error';
+      $('gitnexus-status-card').innerHTML = `<span class="badge ${cls}">${escapeHtml(status?.status || 'unknown')}</span><span>${escapeHtml(status?.message || 'Durum yok')}</span>`;
+    }
 
-        accordion.querySelectorAll('.acc-toggle').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const panel = document.getElementById(btn.dataset.acc);
-            const open = panel.classList.toggle('open');
-            btn.querySelector('.acc-icon').style.transform = open ? 'rotate(180deg)' : '';
+    async function runGitAnalyze(force = false) {
+      const folderPath = projectPath();
+      if (!folderPath) return toast('Proje path boş.');
+      setBusy(true, force ? 'GitNexus force rebuild' : 'GitNexus index');
+      try {
+        const text = await invoke('run_gitnexus_analyze', { folderPath, force });
+        $('git-raw').textContent = text || 'GitNexus analyze tamamlandı.';
+        toast(force ? 'GitNexus force rebuild tamamlandı' : 'GitNexus index tamamlandı');
+        await runGitStatus();
+      } catch (error) {
+        toast(`GitNexus analyze hatası: ${error.message || error}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function runGitQuery() {
+      const folderPath = projectPath();
+      const query = $('git-query').value.trim();
+      const limit = Number($('git-limit').value || 12);
+      if (!folderPath || !query) return toast('GitNexus query için proje ve konu gerekli.');
+      setBusy(true, 'GitNexus query');
+      try {
+        const raw = await invoke('run_gitnexus_query', { folderPath, query, limit });
+        renderGraphFromRaw(raw);
+        showView('graph');
+        toast('GitNexus query tamamlandı');
+      } catch (error) {
+        $('git-raw').textContent = `GitNexus query hatası: ${error.message || error}`;
+        toast(`GitNexus query hatası: ${error.message || error}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderGraphFromRaw(raw) {
+      const payload = parseJson(raw);
+      const graph = extractGraph(payload, raw);
+      state.graph = { ...graph, raw };
+      $('git-raw').textContent = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+      renderGraph();
+    }
+
+    function gitNexusHealth(raw) {
+      const payload = parseJson(raw);
+      if (!payload) return { warning: '', empty: false };
+      const empty = ['processes', 'process_symbols', 'definitions']
+        .every((key) => !Array.isArray(payload[key]) || payload[key].length === 0);
+      return { warning: payload.warning || '', empty };
+    }
+
+    function gitNexusWarningCalloutHtml(raw) {
+      const health = gitNexusHealth(raw);
+      if (!health.warning && !health.empty) return '';
+      const warning = health.warning || 'GitNexus query node veya sembol döndürmedi.';
+      return `
+        <div class="callout warning">
+          <strong>GitNexus query sağlığı</strong>
+          <span>${escapeHtml(warning)}</span>
+          <span>Boş sonuç veya FTS uyarısı varsa önce index'i force rebuild ile yenileyip aynı sorguyu tekrar çalıştırın.</span>
+          <button class="btn warning" type="button" data-action="force-gitnexus-index">Force Rebuild</button>
+        </div>`;
+    }
+
+    function bindGitNexusHealthActions(root = document) {
+      root.querySelectorAll('[data-action="force-gitnexus-index"]').forEach((button) => {
+        button.addEventListener('click', () => runGitAnalyze(true));
+      });
+    }
+
+    function renderSafeMarkdown(text) {
+      return escapeHtml(text || '')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    }
+
+    function extractGraph(payload, raw) {
+      const nodes = [];
+      const edges = [];
+      const seen = new Set();
+      const addNode = (node) => {
+        const id = String(node.id || node.label || `node-${nodes.length + 1}`);
+        if (seen.has(id)) return id;
+        seen.add(id);
+        nodes.push({ ...node, id });
+        return id;
+      };
+      const addEdge = (source, target, label = '') => {
+        if (!source || !target || source === target) return;
+        edges.push({ source: String(source), target: String(target), label });
+      };
+
+      if (payload) {
+        asArray(payload.processes).forEach((item, index) => {
+          addNode({
+            id: item.id || item.process_id || item.name || `process-${index}`,
+            label: item.name || item.title || item.id || `Process ${index + 1}`,
+            type: 'process',
+            path: item.file_path || item.path || item.file || '',
+            raw: item,
           });
         });
-      }
-
-      $('results-section').classList.remove('hidden');
-      $('picker-section').classList.remove('hidden');
-    }
-
-    async function pickFolderAndAnalyze() {
-      const tauri = getTauri();
-      if (!tauri?.dialog?.open || !tauri?.core?.invoke) {
-        showError('Tauri ortamı bulunamadı. Uygulamayı "npm run tauri dev" ile çalıştırın.');
-        return;
-      }
-
-      hideError();
-      let selected;
-      try {
-        selected = await tauri.dialog.open({
-          directory: true,
-          multiple: false,
-          title: 'Analiz edilecek klasörü seçin',
+        asArray(payload.definitions).forEach((item, index) => {
+          addNode({
+            id: item.id || item.symbol_id || item.qualified_name || item.name || `definition-${index}`,
+            label: item.name || item.symbol || item.qualified_name || item.id || `Definition ${index + 1}`,
+            type: item.kind || item.type || 'definition',
+            path: item.file_path || item.path || item.file || '',
+            line: item.line || item.start_line || '',
+            raw: item,
+          });
         });
-      } catch (e) {
-        showError('Klasör seçimi iptal edildi veya başarısız: ' + (e?.message || e));
-        return;
-      }
-
-      if (!selected) return;
-
-      const folderPath = Array.isArray(selected) ? selected[0] : selected;
-      currentFolderPath = folderPath;
-      const pathEl = $('selected-path');
-      pathEl.textContent = folderPath;
-      pathEl.classList.remove('hidden');
-      $('gitnexus-panel').classList.remove('hidden');
-      refreshGitNexusStatus();
-
-      setLoading(true);
-      try {
-        const raw = await tauri.core.invoke('run_analysis_on_folder', {
-          folderPath,
-          enableExternalTools: selectedScanUsesExternalTools(),
+        asArray(payload.process_symbols).forEach((item, index) => {
+          const source = item.process_id || item.process || item.source || item.from;
+          const target = item.symbol_id || item.symbol || item.target || item.to;
+          if (source || target) {
+            const sourceId = source || addNode({ id: `process-edge-${index}`, label: `Process ${index + 1}`, type: 'process', raw: item });
+            const targetId = target || addNode({ id: `symbol-edge-${index}`, label: `Symbol ${index + 1}`, type: 'definition', raw: item });
+            addEdge(sourceId, targetId, item.relationship || item.kind || '');
+          }
         });
-        const report = parseAnalysisReport(raw);
-        if (!report?.summary) {
-          throw new Error('Analiz yanıtında summary eksik; JSON şeması beklenen formatta değil.');
+        if (payload.warning && nodes.length === 0) {
+          addNode({ id: 'gitnexus-warning', label: 'GitNexus warning', type: 'warning', path: payload.warning, raw: payload });
         }
-        setLoading(false);
-        renderReport(report);
-      } catch (e) {
-        setLoading(false);
-        showError('Analiz hatası: ' + (e?.message || String(e)));
+      } else if (typeof raw === 'string') {
+        const matches = [...raw.matchAll(/([A-Za-z]:\\[^\n\r:]+\.py|[\w./-]+\.py)(?::(\d+))?/g)].slice(0, 18);
+        matches.forEach((match, index) => addNode({
+          id: `path-${index}`,
+          label: shortPath(match[1]),
+          type: 'file',
+          path: match[1],
+          line: match[2] || '',
+          raw: match[0],
+        }));
+      }
+
+      if (nodes.length > 1 && edges.length === 0) {
+        for (let i = 1; i < nodes.length; i += 1) addEdge(nodes[0].id, nodes[i].id, 'related');
+      }
+      return { nodes, edges, warning: payload?.warning || '' };
+    }
+
+    function renderGraph() {
+      const svg = $('graph-svg');
+      const { nodes, edges, warning } = state.graph;
+      if (!nodes.length) {
+        svg.innerHTML = `<text x="450" y="280" text-anchor="middle" fill="#657386" font-size="14">Graph node yok</text>`;
+        $('graph-inspector').innerHTML = warning
+          ? gitNexusWarningCalloutHtml(state.graph.raw)
+          : '<div class="empty">Node seçilmedi.</div>';
+        bindGitNexusHealthActions($('graph-inspector'));
+        return;
+      }
+
+      const centerX = 450;
+      const centerY = 280;
+      const radius = Math.min(230, 95 + nodes.length * 12);
+      const positioned = nodes.map((node, index) => {
+        const angle = (Math.PI * 2 * index) / nodes.length - Math.PI / 2;
+        const r = node.type === 'process' ? radius * 0.68 : radius;
+        return { ...node, x: centerX + Math.cos(angle) * r, y: centerY + Math.sin(angle) * r };
+      });
+      const byId = new Map(positioned.map((node) => [node.id, node]));
+      const edgeSvg = edges.map((edge) => {
+        const source = byId.get(edge.source);
+        const target = byId.get(edge.target);
+        if (!source || !target) return '';
+        return `<line class="edge-line" x1="${source.x}" y1="${source.y}" x2="${target.x}" y2="${target.y}" />`;
+      }).join('');
+      const nodeSvg = positioned.map((node) => {
+        const color = node.type === 'warning' ? '#f1b74f' : node.type === 'process' ? '#0f766e' : node.type === 'file' ? '#2563a9' : '#ffffff';
+        const stroke = node.type === 'process' ? '#0b5e57' : node.type === 'warning' ? '#b7791f' : '#7f9db2';
+        return `<g class="graph-node" data-node-id="${escapeHtml(node.id)}" transform="translate(${node.x}, ${node.y})">
+          <circle r="28" fill="${color}" stroke="${stroke}" stroke-width="2"></circle>
+          <text class="node-label" y="46" text-anchor="middle">${escapeHtml(trimLabel(node.label, 24))}</text>
+        </g>`;
+      }).join('');
+      svg.innerHTML = `${edgeSvg}${nodeSvg}`;
+      svg.querySelectorAll('.graph-node').forEach((el) => {
+        el.addEventListener('click', () => selectGraphNode(el.dataset.nodeId));
+      });
+      if (!state.selectedGraphNode || !byId.has(state.selectedGraphNode)) {
+        state.selectedGraphNode = positioned[0].id;
+      }
+      renderGraphInspector();
+    }
+
+    function trimLabel(label, max) {
+      const text = String(label || '');
+      return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+    }
+
+    function selectGraphNode(id) {
+      state.selectedGraphNode = id;
+      renderGraphInspector();
+    }
+
+    function renderGraphInspector() {
+      const node = state.graph.nodes.find((item) => item.id === state.selectedGraphNode);
+      if (!node) {
+        $('graph-inspector').innerHTML = '<div class="empty">Node seçilmedi.</div>';
+        return;
+      }
+      $('graph-inspector').innerHTML = `
+        <div class="kv"><span>Type</span><strong>${escapeHtml(node.type || 'node')}</strong></div>
+        <div class="kv"><span>Name</span><strong>${escapeHtml(node.label || node.id)}</strong></div>
+        <div class="kv"><span>Path</span><strong>${escapeHtml(node.path || '-')}</strong></div>
+        <div class="kv"><span>Line</span><strong>${escapeHtml(node.line || '-')}</strong></div>
+        <pre class="raw">${escapeHtml(JSON.stringify(node.raw || node, null, 2))}</pre>
+      `;
+    }
+
+    function fallbackProviders() {
+      return [
+        { id: 'openai', label: 'OpenAI (ChatGPT API)', base_url: 'https://api.openai.com/v1', model: 'gpt-5.5', models: ['gpt-5.5', 'gpt-5.4-mini', 'gpt-5.4-nano'], saved: false, notes: 'Responses API' },
+        { id: 'deepseek', label: 'DeepSeek', base_url: 'https://api.deepseek.com', model: 'deepseek-v4-flash', models: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner'], saved: false, notes: 'Chat completions' },
+        { id: 'openai_compatible', label: 'OpenAI-Compatible', base_url: 'https://api.openai.com/v1', model: 'gpt-5.4-mini', models: ['gpt-5.4-mini', 'deepseek-v4-flash', 'deepseek-v4-pro'], saved: false, notes: 'Chat completions' },
+      ];
+    }
+
+    async function loadProviders() {
+      if (!hasTauriApi()) {
+        state.providers = fallbackProviders();
+        renderProviders();
+        return;
+      }
+      try {
+        const raw = await invoke('list_ai_provider_configs');
+        state.providers = asArray(parseJson(raw));
+      } catch (error) {
+        state.providers = fallbackProviders();
+        toast(`Provider ayarları okunamadı: ${error.message || error}`);
+      }
+      renderProviders();
+    }
+
+    function activeProvider() {
+      return state.providers.find((provider) => provider.id === state.activeProvider) || state.providers[0];
+    }
+
+    function renderProviders() {
+      if (!state.providers.length) return;
+      if (!state.providers.some((provider) => provider.id === state.activeProvider)) {
+        state.activeProvider = state.providers[0].id;
+      }
+      $('provider-cards').innerHTML = state.providers.map((provider) => `
+        <button type="button" class="provider-card ${provider.id === state.activeProvider ? 'active' : ''}" data-provider="${escapeHtml(provider.id)}">
+          <h3>${escapeHtml(provider.label)}</h3>
+          <p>${escapeHtml(provider.model)} · ${escapeHtml(provider.base_url)}</p>
+          <span class="badge ${provider.saved ? 'ok' : 'muted'}">${provider.saved ? 'API Key Saved' : 'No Key'}</span>
+        </button>
+      `).join('');
+      $('provider-cards').querySelectorAll('[data-provider]').forEach((card) => {
+        card.addEventListener('click', () => {
+          state.activeProvider = card.dataset.provider;
+          renderProviders();
+        });
+      });
+
+      const options = state.providers.map((provider) => `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.label)}</option>`).join('');
+      $('settings-provider').innerHTML = options;
+      $('ai-provider').innerHTML = options;
+      $('settings-provider').value = state.activeProvider;
+      $('ai-provider').value = state.activeProvider;
+      renderProviderForm();
+      renderAiProviderState();
+    }
+
+    function renderProviderForm() {
+      const provider = activeProvider();
+      if (!provider) return;
+      $('settings-model').value = provider.model || '';
+      $('settings-base-url').value = provider.base_url || '';
+      $('settings-api-key').value = '';
+      $('settings-status').textContent = provider.saved ? 'API Key Saved' : 'No Key';
+      $('settings-status').className = `badge ${provider.saved ? 'ok' : 'muted'}`;
+      $('settings-model-list').innerHTML = asArray(provider.models)
+        .map((model) => `<option value="${escapeHtml(model)}"></option>`)
+        .join('');
+    }
+
+    function renderAiProviderState() {
+      const provider = activeProvider();
+      if (!provider) return;
+      $('ai-provider-state').innerHTML = `<span class="badge ${provider.saved ? 'ok' : 'warning'}">${provider.saved ? 'API Key Saved' : 'No Key'}</span><span>${escapeHtml(provider.model)} · ${escapeHtml(provider.base_url)}</span>`;
+    }
+
+    async function saveProvider() {
+      const provider = $('settings-provider').value;
+      setBusy(true, 'Provider save');
+      try {
+        const raw = await invoke('save_ai_provider_config', {
+          provider,
+          apiKey: $('settings-api-key').value,
+          model: $('settings-model').value,
+          baseUrl: $('settings-base-url').value,
+        });
+        state.providers = asArray(parseJson(raw));
+        state.activeProvider = provider;
+        renderProviders();
+        toast('Provider kaydedildi');
+      } catch (error) {
+        toast(`Provider kaydı hatası: ${error.message || error}`);
+      } finally {
+        setBusy(false);
       }
     }
 
-    $('btn-pick-folder').addEventListener('click', pickFolderAndAnalyze);
-    $('btn-gitnexus-status').addEventListener('click', refreshGitNexusStatus);
-    $('btn-gitnexus-analyze').addEventListener('click', runGitNexusAnalyze);
-    $('btn-gitnexus-query').addEventListener('click', runGitNexusQuery);
-    $('gitnexus-query-input').addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') runGitNexusQuery();
-    });
-    $('btn-new-scan').addEventListener('click', () => {
-      $('results-section').classList.add('hidden');
-      $('selected-path').classList.add('hidden');
-      hideError();
-      pickFolderAndAnalyze();
-    });
-    ['filter-severity', 'filter-tool', 'filter-category'].forEach((id) => {
-      $(id).addEventListener('change', () => {
-        if (currentReport) renderReport(currentReport);
+    async function deleteProvider() {
+      const provider = $('settings-provider').value;
+      setBusy(true, 'Provider delete');
+      try {
+        const raw = await invoke('delete_ai_provider_config', { provider });
+        state.providers = asArray(parseJson(raw));
+        state.activeProvider = provider;
+        renderProviders();
+        toast('Provider anahtarı silindi');
+      } catch (error) {
+        toast(`Provider silme hatası: ${error.message || error}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function runAiGitNexus() {
+      const folderPath = projectPath();
+      const provider = $('ai-provider').value;
+      const prompt = $('ai-prompt').value.trim();
+      if (!folderPath || !prompt) return toast('AI workflow için proje ve konu gerekli.');
+      setBusy(true, 'AI + GitNexus');
+      try {
+        const raw = await invoke('run_ai_gitnexus_query', { folderPath, provider, prompt });
+        const result = parseJson(raw);
+        const gitnexusOutput = result?.gitnexus_output || '';
+        $('ai-answer').innerHTML = `${gitNexusWarningCalloutHtml(gitnexusOutput)}<div>${renderSafeMarkdown(result?.answer || raw)}</div>`;
+        bindGitNexusHealthActions($('ai-answer'));
+        $('ai-result-meta').textContent = result ? `${result.provider} · ${result.model} · ${result.gitnexus_query}` : 'Yanıt alındı';
+        if (gitnexusOutput) renderGraphFromRaw(gitnexusOutput);
+        toast('AI/GitNexus workflow tamamlandı');
+      } catch (error) {
+        $('ai-answer').textContent = `AI/GitNexus hatası: ${error.message || error}`;
+        toast(`AI/GitNexus hatası: ${error.message || error}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderAll() {
+      renderMetrics(state.report);
+      renderToolStrip(state.report);
+      renderFilterOptions();
+      renderIssues();
+      renderProviders();
+    }
+
+    function showView(view, updateHash = true) {
+      document.querySelectorAll('.view').forEach((el) => el.classList.remove('active'));
+      $(`view-${view}`).classList.add('active');
+      document.querySelectorAll('.nav-btn').forEach((button) => {
+        button.classList.toggle('active', button.dataset.view === view);
       });
-    });
-    $('filter-file').addEventListener('input', () => {
-      if (currentReport) renderReport(currentReport);
-    });
+      if (updateHash && location.hash !== `#${view}`) {
+        history.replaceState(null, '', `#${view}`);
+      }
+    }
+
+    function wireEvents() {
+      document.querySelectorAll('.nav-btn').forEach((button) => {
+        button.addEventListener('click', () => showView(button.dataset.view));
+      });
+      document.querySelectorAll('.scan-target').forEach((button) => {
+        button.addEventListener('click', () => selectScanTarget(button.dataset.scanTarget));
+      });
+      $('btn-pick-folder').addEventListener('click', pickFolder);
+      $('btn-run-scan').addEventListener('click', runScan);
+      $('btn-git-status-top').addEventListener('click', runGitStatus);
+      $('btn-refresh-status').addEventListener('click', runGitStatus);
+      $('btn-git-status').addEventListener('click', runGitStatus);
+      $('btn-git-index').addEventListener('click', () => runGitAnalyze(false));
+      $('btn-git-force-index').addEventListener('click', () => runGitAnalyze(true));
+      $('btn-git-query').addEventListener('click', runGitQuery);
+      $('git-query').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') runGitQuery();
+      });
+      ['filter-severity', 'filter-tool', 'filter-text', 'issues-severity', 'issues-tool', 'issues-category'].forEach((id) => {
+        $(id).addEventListener(id === 'filter-text' ? 'input' : 'change', renderIssues);
+      });
+      $('settings-provider').addEventListener('change', () => {
+        state.activeProvider = $('settings-provider').value;
+        renderProviders();
+      });
+      $('ai-provider').addEventListener('change', () => {
+        state.activeProvider = $('ai-provider').value;
+        renderProviders();
+      });
+      $('btn-provider-refresh').addEventListener('click', loadProviders);
+      $('btn-provider-save').addEventListener('click', saveProvider);
+      $('btn-provider-delete').addEventListener('click', deleteProvider);
+      $('btn-ai-query').addEventListener('click', runAiGitNexus);
+      $('project-path').addEventListener('change', () => {
+        localStorage.setItem('pyshield.projectPath', $('project-path').value.trim());
+        renderMetrics(state.report);
+      });
+    }
+
+    function boot() {
+      const storedPath = localStorage.getItem('pyshield.projectPath');
+      if (storedPath) $('project-path').value = storedPath;
+      selectScanTarget(localStorage.getItem('pyshield.scanTarget') || 'native');
+      wireEvents();
+      renderMetrics(null);
+      renderToolStrip(null);
+      renderIssues();
+      renderGraph();
+      loadProviders();
+      const initialView = location.hash.replace('#', '');
+      if (['overview', 'issues', 'graph', 'ai', 'settings'].includes(initialView)) {
+        showView(initialView, false);
+      }
+    }
+
+    boot();
   </script>
 </body>
 </html>
