@@ -424,8 +424,17 @@
     .detail-block {
       display: grid;
       gap: 10px;
+      align-content: start;
       font-size: 13px;
       color: #334155;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    .detail-block p {
+      margin: 0;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
     }
 
     .code {
@@ -438,6 +447,22 @@
       white-space: pre-wrap;
       line-height: 1.45;
       font-size: 12px;
+    }
+
+    #issue-detail,
+    #issues-detail,
+    #graph-inspector {
+      overflow: auto;
+    }
+
+    #issue-detail,
+    #issues-detail {
+      max-height: min(520px, calc(100vh - 440px));
+    }
+
+    #issue-detail .code,
+    #issues-detail .code {
+      max-height: 240px;
     }
 
     .raw {
@@ -648,6 +673,12 @@
       grid-template-rows: auto minmax(0, 1fr);
     }
 
+    .selected-issue-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+    }
+
     #view-issues aside.panel {
       align-self: stretch;
     }
@@ -661,6 +692,7 @@
     #view-issues #issues-detail {
       overflow: auto;
       min-height: 0;
+      max-height: none;
     }
 
     #view-graph > .panel {
@@ -860,7 +892,7 @@
                 </div>
               </section>
 
-              <section class="panel">
+              <section class="panel selected-issue-panel">
                 <div class="panel-header">
                   <div>
                     <h2 class="panel-title">Selected Issue</h2>
@@ -906,7 +938,7 @@
                 </table>
               </div>
             </section>
-            <aside class="panel">
+            <aside class="panel selected-issue-panel">
               <div class="panel-header">
                 <h2 class="panel-title">Inspector</h2>
               </div>
@@ -1049,7 +1081,7 @@
     const state = {
       report: null,
       issues: [],
-      selectedIssueKey: null,
+      selectedIssueId: null,
       selectedGraphNode: null,
       providers: [],
       activeProvider: 'openai',
@@ -1171,7 +1203,7 @@
     }
 
     function flattenIssues(report) {
-      return asArray(report?.files).flatMap((file) =>
+      const issues = asArray(report?.files).flatMap((file) =>
         asArray(file.issues).map((issue) => ({
           ...issue,
           file_path: issue.file_path || file.file_path,
@@ -1180,6 +1212,7 @@
           key: issueKey({ ...issue, file_path: issue.file_path || file.file_path }),
         }))
       ).sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+      return issues.map((issue, index) => ({ ...issue, id: `issue-${index}` }));
     }
 
     function applyIssueFilters(source = state.issues, prefix = 'filter') {
@@ -1280,9 +1313,9 @@
         return;
       }
       body.innerHTML = visible.map((issue) => {
-        const selected = issue.key === state.selectedIssueKey ? 'selected' : '';
+        const selected = issue.id === state.selectedIssueId ? 'selected' : '';
         const categoryCell = targetId === 'issues-table' ? `<td>${escapeHtml(issue.category || '')}</td>` : '';
-        return `<tr class="${selected}" data-issue-key="${escapeHtml(issue.key)}">
+        return `<tr class="${selected}" data-issue-id="${escapeHtml(issue.id)}">
           <td><span class="badge ${severityClass(issue.severity)}">${escapeHtml(issue.severity || 'INFO')}</span></td>
           ${categoryCell}
           <td>${escapeHtml(issue.tool || 'pyshield')}</td>
@@ -1293,12 +1326,13 @@
         </tr>`;
       }).join('');
 
-      body.querySelectorAll('tr[data-issue-key]').forEach((row) => {
-        row.addEventListener('click', () => selectIssue(row.dataset.issueKey));
+      body.querySelectorAll('tr[data-issue-id]').forEach((row) => {
+        row.addEventListener('click', () => selectIssue(row.dataset.issueId));
       });
     }
 
     function renderIssues() {
+      ensureSelectedIssue();
       const overviewIssues = applyIssueFilters(state.issues, 'filter');
       const issuesView = applyIssueFilters(state.issues, 'issues');
       $('issue-count-label').textContent = overviewIssues.length;
@@ -1307,13 +1341,23 @@
       renderIssueDetail();
     }
 
-    function selectIssue(key) {
-      state.selectedIssueKey = key;
+    function selectIssue(id) {
+      state.selectedIssueId = id;
       renderIssues();
     }
 
+    function ensureSelectedIssue() {
+      if (!state.issues.length) {
+        state.selectedIssueId = null;
+        return;
+      }
+      if (!selectedIssue()) {
+        state.selectedIssueId = state.issues[0].id;
+      }
+    }
+
     function selectedIssue() {
-      return state.issues.find((issue) => issue.key === state.selectedIssueKey) || null;
+      return state.issues.find((issue) => issue.id === state.selectedIssueId) || null;
     }
 
     function renderIssueDetail() {
@@ -1370,7 +1414,7 @@
         state.lastScanTools = selectedTools;
         state.report = report;
         state.issues = flattenIssues(report);
-        state.selectedIssueKey = state.issues[0]?.key || null;
+        state.selectedIssueId = state.issues[0]?.id || null;
         renderAll();
         toast(`${selectedTools.join(', ')} scan tamamlandı: ${state.issues.length} bulgu`);
       } catch (error) {
@@ -1460,7 +1504,8 @@
         <div class="callout warning">
           <strong>GitNexus query sağlığı</strong>
           <span>${escapeHtml(warning)}</span>
-          <span>Boş sonuç veya FTS uyarısı varsa önce index'i force rebuild ile yenileyip aynı sorguyu tekrar çalıştırın.</span>
+          <span>Bu AI provider/API key hatası değil; GitNexus keyword indexi query sırasında kullanılamıyor.</span>
+          <span>Önce index'i force rebuild ile yenileyip aynı sorguyu tekrar çalıştırın.</span>
           <button class="btn warning" type="button" data-action="force-gitnexus-index">Force Rebuild</button>
         </div>`;
     }

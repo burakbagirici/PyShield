@@ -251,3 +251,118 @@ fn external_adapters_merge_managed_tool_outputs() {
     fs::remove_dir_all(root).unwrap();
     fs::remove_dir_all(tools_root).unwrap();
 }
+
+#[test]
+fn gitnexus_analyze_uses_full_rebuild_without_file_injection() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let root = std::env::temp_dir().join(format!(
+        "pyshield_gitnexus_args_test_{}",
+        std::process::id()
+    ));
+    let tools_root = std::env::temp_dir().join(format!(
+        "pyshield_gitnexus_args_tools_{}",
+        std::process::id()
+    ));
+    let node_bin = tools_root.join("node").join("node_modules").join(".bin");
+    let args_file = root.join("gitnexus_args.txt");
+    let _ = fs::remove_dir_all(&root);
+    let _ = fs::remove_dir_all(&tools_root);
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&node_bin).unwrap();
+    fs::write(root.join("sample.py"), "print('ok')\n").unwrap();
+    fs::write(
+        node_bin.join("gitnexus.cmd"),
+        "@echo off\r\nif \"%1\"==\"--version\" (echo 1.6.5& exit /b 0)\r\necho %* > \"%PYSHIELD_GITNEXUS_ARGS_FILE%\"\r\necho indexed\r\n",
+    )
+    .unwrap();
+
+    let previous_tools_dir = std::env::var_os("PYSHIELD_TOOLS_DIR");
+    let previous_args_file = std::env::var_os("PYSHIELD_GITNEXUS_ARGS_FILE");
+    unsafe {
+        std::env::set_var("PYSHIELD_TOOLS_DIR", &tools_root);
+        std::env::set_var("PYSHIELD_GITNEXUS_ARGS_FILE", &args_file);
+    }
+
+    ai_code_analyzer::run_gitnexus_analyze_on_folder(root.to_str().unwrap(), true).unwrap();
+
+    unsafe {
+        if let Some(previous_tools_dir) = previous_tools_dir {
+            std::env::set_var("PYSHIELD_TOOLS_DIR", previous_tools_dir);
+        } else {
+            std::env::remove_var("PYSHIELD_TOOLS_DIR");
+        }
+        if let Some(previous_args_file) = previous_args_file {
+            std::env::set_var("PYSHIELD_GITNEXUS_ARGS_FILE", previous_args_file);
+        } else {
+            std::env::remove_var("PYSHIELD_GITNEXUS_ARGS_FILE");
+        }
+    }
+
+    let args = fs::read_to_string(&args_file).unwrap();
+    assert!(args.contains("analyze"));
+    assert!(args.contains("--skip-git"));
+    assert!(args.contains("--skip-agents-md"));
+    assert!(args.contains("--skip-skills"));
+    assert!(args.contains("--force"));
+    assert!(!args.contains("--index-only"));
+
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(tools_root).unwrap();
+}
+
+#[test]
+fn gitnexus_query_uses_cypher_fallback_when_fts_is_missing() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let root = std::env::temp_dir().join(format!(
+        "pyshield_gitnexus_fallback_test_{}",
+        std::process::id()
+    ));
+    let tools_root = std::env::temp_dir().join(format!(
+        "pyshield_gitnexus_fallback_tools_{}",
+        std::process::id()
+    ));
+    let node_bin = tools_root.join("node").join("node_modules").join(".bin");
+    let _ = fs::remove_dir_all(&root);
+    let _ = fs::remove_dir_all(&tools_root);
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&node_bin).unwrap();
+    fs::write(root.join("sample.py"), "print('ok')\n").unwrap();
+    fs::write(
+        node_bin.join("gitnexus.cmd"),
+        "@echo off\r\nif \"%1\"==\"--version\" (echo 1.6.5& exit /b 0)\r\nif \"%1\"==\"query\" (echo {\"processes\":[],\"process_symbols\":[],\"definitions\":[],\"warning\":\"FTS indexes missing\"}& exit /b 0)\r\nif \"%1\"==\"cypher\" (echo {\"markdown\":\"^| n.name ^| n.filePath ^|\\n^| --- ^| --- ^|\\n^| AiGraphUseCase ^| src/api/contracts/v1/ai.py ^|\",\"row_count\":1}& exit /b 0)\r\necho {}\r\n",
+    )
+    .unwrap();
+
+    let previous_tools_dir = std::env::var_os("PYSHIELD_TOOLS_DIR");
+    unsafe {
+        std::env::set_var("PYSHIELD_TOOLS_DIR", &tools_root);
+    }
+
+    let raw = ai_code_analyzer::run_gitnexus_query_on_folder(root.to_str().unwrap(), "GraphRAG", 6)
+        .unwrap();
+
+    unsafe {
+        if let Some(previous_tools_dir) = previous_tools_dir {
+            std::env::set_var("PYSHIELD_TOOLS_DIR", previous_tools_dir);
+        } else {
+            std::env::remove_var("PYSHIELD_TOOLS_DIR");
+        }
+    }
+
+    let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert!(
+        value["warning"]
+            .as_str()
+            .unwrap()
+            .contains("cypher fallback")
+    );
+    assert_eq!(value["definitions"][0]["name"], "AiGraphUseCase");
+    assert_eq!(
+        value["definitions"][0]["file_path"],
+        "src/api/contracts/v1/ai.py"
+    );
+    assert_eq!(value["fallback"]["tool"], "gitnexus cypher");
+
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(tools_root).unwrap();
+}

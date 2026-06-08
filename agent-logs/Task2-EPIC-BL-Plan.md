@@ -344,7 +344,7 @@ Build Notu: Root `package.json` eklendi; `npm run tauri build` komutu Tauri CLI 
 
 Son Build Notu: 2026-06-05 final koşusunda `cargo test` 12/12 geçti. `npm run tauri build` uyarısız şekilde release binary, MSI ve NSIS installer üretti.
 
-Frontend Güncelleme Notu: Analiz modu seçimi eklendi: hızlı Rust scan veya tam toolchain scan. GitNexus paneli frontend'e eklendi; seçili klasör için status yenileme, index-only analyze ve query komutları Tauri üzerinden çalışıyor.
+Frontend Güncelleme Notu: Analiz modu seçimi eklendi: hızlı Rust scan veya tam toolchain scan. GitNexus paneli frontend'e eklendi; seçili klasör için status yenileme, dosya enjeksiyonsuz analyze ve query komutları Tauri üzerinden çalışıyor.
 
 Yeniden Tasarım Kapanış Notu: 2026-06-05 tarihinde frontend prototip yapıdan tam PyShield Workbench uygulama kabuğuna taşındı. Sidebar navigasyonu, Overview, Issues, GitNexus Graph, AI Workbench ve Settings ekranları `src-frontend/index.html` içinde kodlandı. Tauri backend'e SQLite provider ayarları, OpenAI/DeepSeek/OpenAI-compatible provider listesi, API key kaydetme/silme ve AI + GitNexus workflow komutları eklendi. GitNexus query çağrısı path yerine registry repo etiketi kullanacak şekilde düzeltildi; index komutuna `force` seçeneği eklendi.
 
@@ -371,7 +371,7 @@ Plan:
 - App shell: sol sidebar, üst command bar, proje path input'u, klasör seçme, Native/Full Toolchain scan modu.
 - Overview: metrikler, PyShield/Ruff/Bandit/Pyright/GitNexus status strip, hızlı issue triage ve selected issue inspector.
 - Issues: severity/tool/category filtreleri, path/rule/message araması ve detay inspector.
-- GitNexus Graph: `status`, `analyze --index-only`, `analyze --index-only --force`, `query`, limit seçimi, JSON raw output ve node/edge SVG canvas.
+- GitNexus Graph: `status`, `analyze --skip-git --skip-agents-md --skip-skills`, `analyze --force --skip-git --skip-agents-md --skip-skills`, `query`, limit seçimi, JSON raw output ve node/edge SVG canvas.
 - AI Workbench: konu prompt'u, provider seçimi, GitNexus query + LLM özet akışı.
 - Settings: OpenAI, DeepSeek ve OpenAI-compatible provider kartları; model, base URL ve API key yönetimi.
 - Responsive davranış: desktop iki kolon, dar ekranda sidebar üst navigasyona ve paneller tek kolona düşer.
@@ -408,7 +408,7 @@ Kabul kriterleri:
 
 Status: Tamamlandı
 
-Tamamlanma Notu: `D:\PROGRAMMING\abey` için `gitnexus analyze D:\PROGRAMMING\abey --index-only --force` çalıştırıldı; 16.1 sn içinde 26.615 node, 44.124 edge, 799 cluster ve 300 flow üretildi. `gitnexus status` up-to-date dönüyor. CLI query'nin `-r` parametresinde path yerine repo label kullanılması gerektiği tespit edildi ve PyShield adapter bu davranışa göre düzeltildi. Query çıktısında FTS warning gibi sağlık sinyalleri frontend raw output ve graph inspector alanlarında görünür.
+Tamamlanma Notu: `D:\PROGRAMMING\abey` için GitNexus index üretimi doğrulandı; 26.615 node, 44.124 edge, 799 cluster ve 300 flow üretildi. `gitnexus status` up-to-date dönüyor. CLI query'nin `-r` parametresinde path yerine repo label kullanılması gerektiği tespit edildi ve PyShield adapter bu davranışa göre düzeltildi. Query çıktısında FTS warning gibi sağlık sinyalleri frontend raw output ve graph inspector alanlarında görünür.
 
 Plan:
 
@@ -431,6 +431,10 @@ Status: Tamamlandı
 Tamamlanma Notu: Üst command bar'daki Native/Full dropdown'u görünür segmented tool seçimine çevrildi. Kullanıcı artık `Native`, `Full`, `Ruff`, `Bandit`, `Pyright` veya `GitNexus` hedeflerinden birini seçip yalnız o aracı çalıştırabilir. Backend tarafında `AnalysisOptions` native analiz ve external tool listesini ayrı ayrı taşıyacak şekilde genişletildi; Tauri `run_analysis_on_folder` komutu `selected_tools` parametresi kabul ediyor. `tests/p0_regressions.rs` içinde yalnız Ruff çalıştırma regression testi eklendi.
 
 UI Kapanış Notu: Issues ekranında sol tablo paneli viewport yüksekliğine stretch edildi ve uzun Pyright mesajları üç satırda clamp edilerek inspector'a taşındı. GitNexus ekranında graph canvas ve raw output paneli viewport içine sığacak grid düzenine alındı. AI Workbench ve GitNexus inspector içinde boş query + FTS indeks uyarısı özel callout olarak gösteriliyor; callout içinden `Force Rebuild` aksiyonu çalıştırılabiliyor.
+
+Seçim/Inspector Düzeltme Notu: Overview `Selected Issue` ve Issues `Inspector` panelleri viewport içinde bağımsız scroll container olarak güncellendi. Issue seçim modeli uzun mesaj/path içeren HTML `data-*` key yerine kısa numeric id kullanıyor; Pyright gibi uzun mesajlı bulgularda satır seçimi artık iki inspector alanını da tutarlı doldurur.
+
+GitNexus Rebuild Notu: PyShield GitNexus analyze komutu `--index-only` yerine `--skip-git --skip-agents-md --skip-skills` kullanacak şekilde değiştirildi. Böylece hedef repoya AGENTS/CLAUDE/skill dosyası enjekte edilmeden ve git repo zorunluluğuna takılmadan GitNexus'in normal FTS rebuild yolu tetiklenir. 1.6.5 stable sürümünde Abey query hâlâ `FTS indexes missing` uyarısı döndürebiliyor; UI bunu AI/API key hatasından ayrı bir GitNexus query sağlık sinyali olarak gösterir. Query boş + FTS warning durumunda backend otomatik `gitnexus cypher` keyword fallback çalıştırır ve bulunan node'ları `definitions` alanına ekler.
 
 Kabul kriterleri:
 

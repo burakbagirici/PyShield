@@ -2,6 +2,7 @@ use crate::{
     ErrorBreakdown, FileAnalysisResult, Issue, Severity, ToolStatus, issue_from_external_tool,
 };
 use serde::Deserialize;
+use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -496,7 +497,13 @@ pub fn run_gitnexus_analyze(project_path: &str, force: bool) -> Result<String, S
     let root = Path::new(project_path);
     let command = find_tool_command(project_path, "gitnexus")
         .ok_or_else(|| "gitnexus PyShield araç seti veya PATH içinde bulunamadı.".to_string())?;
-    let mut args = vec!["analyze", project_path, "--index-only"];
+    let mut args = vec![
+        "analyze",
+        project_path,
+        "--skip-git",
+        "--skip-agents-md",
+        "--skip-skills",
+    ];
     if force {
         args.push("--force");
     }
@@ -533,10 +540,167 @@ pub fn run_gitnexus_query(project_path: &str, query: &str, limit: usize) -> Resu
     )?;
     let text = command_output_text(&output);
     if output.status.success() {
-        Ok(text)
+        Ok(gitnexus_query_with_cypher_fallback(
+            project_path,
+            &command,
+            root,
+            repo_selector.as_str(),
+            trimmed,
+            limit,
+            &text,
+        )
+        .unwrap_or(text))
     } else {
         Err(compact_tool_message(&text))
     }
+}
+
+fn gitnexus_query_with_cypher_fallback(
+    project_path: &str,
+    command: &ToolCommand,
+    cwd: &Path,
+    repo_selector: &str,
+    query: &str,
+    limit: usize,
+    original_text: &str,
+) -> Option<String> {
+    if !gitnexus_query_needs_fallback(original_text) {
+        return None;
+    }
+
+    let cypher = gitnexus_keyword_cypher(query, limit)?;
+    let output = command
+        .output(&["cypher", "-r", repo_selector, cypher.as_str()], cwd)
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let fallback_text = command_output_text(&output);
+    let definitions = gitnexus_definitions_from_cypher(&fallback_text);
+    if definitions.is_empty() {
+        return None;
+    }
+
+    let mut payload = serde_json::from_str::<Value>(original_text).unwrap_or_else(|_| json!({}));
+    let warning = payload
+        .get("warning")
+        .and_then(Value::as_str)
+        .unwrap_or("GitNexus query boş döndü.")
+        .to_string();
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert("definitions".to_string(), Value::Array(definitions.clone()));
+        obj.insert(
+            "warning".to_string(),
+            Value::String(format!(
+                "{} PyShield cypher fallback {} node döndürdü.",
+                warning,
+                definitions.len()
+            )),
+        );
+        obj.insert(
+            "fallback".to_string(),
+            json!({
+                "tool": "gitnexus cypher",
+                "repo": repo_selector,
+                "project_path": project_path,
+                "query": cypher,
+                "raw": fallback_text,
+            }),
+        );
+    }
+
+    serde_json::to_string_pretty(&payload).ok()
+}
+
+fn gitnexus_query_needs_fallback(text: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<Value>(text) else {
+        return false;
+    };
+    let warning = value
+        .get("warning")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let empty = ["processes", "process_symbols", "definitions"]
+        .iter()
+        .all(|key| {
+            !value
+                .get(*key)
+                .and_then(Value::as_array)
+                .is_some_and(|items| !items.is_empty())
+        });
+    empty && warning.contains("fts indexes missing")
+}
+
+fn gitnexus_keyword_cypher(query: &str, limit: usize) -> Option<String> {
+    let terms = gitnexus_search_terms(query);
+    if terms.is_empty() {
+        return None;
+    }
+    let conditions: Vec<String> = terms
+        .iter()
+        .flat_map(|term| {
+            let escaped = term.replace('\\', "\\\\").replace('\'', "''");
+            [
+                format!("toLower(n.name) CONTAINS '{}'", escaped),
+                format!("toLower(n.filePath) CONTAINS '{}'", escaped),
+                format!("toLower(n.content) CONTAINS '{}'", escaped),
+            ]
+        })
+        .collect();
+    Some(format!(
+        "MATCH (n) WHERE {} RETURN n.name, n.filePath LIMIT {}",
+        conditions.join(" OR "),
+        limit.clamp(1, 50)
+    ))
+}
+
+fn gitnexus_search_terms(query: &str) -> Vec<String> {
+    let mut seen = HashSet::new();
+    query
+        .split(|ch: char| !ch.is_alphanumeric())
+        .filter_map(|term| {
+            let normalized = term.to_lowercase();
+            if normalized.chars().count() < 3 || !seen.insert(normalized.clone()) {
+                return None;
+            }
+            Some(normalized)
+        })
+        .take(8)
+        .collect()
+}
+
+fn gitnexus_definitions_from_cypher(text: &str) -> Vec<Value> {
+    let Ok(value) = serde_json::from_str::<Value>(text) else {
+        return vec![];
+    };
+    let Some(markdown) = value.get("markdown").and_then(Value::as_str) else {
+        return vec![];
+    };
+    markdown
+        .lines()
+        .skip(2)
+        .filter_map(|line| {
+            let columns: Vec<_> = line
+                .trim()
+                .trim_matches('^')
+                .trim_matches('|')
+                .split('|')
+                .map(|column| column.trim().trim_matches('^').trim())
+                .collect();
+            if columns.len() < 2 || columns[0].is_empty() {
+                return None;
+            }
+            Some(json!({
+                "id": format!("cypher:{}:{}", columns[1], columns[0]),
+                "name": columns[0],
+                "file_path": columns[1],
+                "kind": "cypher_fallback",
+                "source": "gitnexus_cypher_fallback",
+            }))
+        })
+        .collect()
 }
 
 fn gitnexus_repo_selector(project_path: &str) -> String {

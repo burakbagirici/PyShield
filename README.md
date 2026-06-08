@@ -42,7 +42,7 @@ Yeni Tauri arayüzü ham JSON gösteren prototip yerine gerçek analiz çalışm
 
 - **Overview:** proje yolu, tool bazlı scan seçimi, metrikler, toolchain status ve hızlı issue triage.
 - **Issues:** severity/tool/category filtreleri, seçilebilir tablo ve issue inspector.
-- **GitNexus Graph:** `status`, `analyze --index-only`, `analyze --index-only --force`, `query` ve CLI JSON çıktısından node/edge canvas.
+- **GitNexus Graph:** `status`, dosya enjeksiyonsuz `analyze`, `analyze --force`, `query` ve CLI JSON çıktısından node/edge canvas.
 - **AI Workbench:** kullanıcının girdiği konu GitNexus query ile çalıştırılır; seçili provider/model GitNexus çıktısını özetler.
 - **Settings:** OpenAI, DeepSeek ve OpenAI-compatible provider ayarları; model, base URL ve API key kaydı.
 
@@ -182,21 +182,21 @@ npm run tools:install
 GitNexus, repoyu knowledge graph olarak indexleyen ve execution-flow sorguları sağlayan CLI/MCP aracıdır. PyShield içinde GitNexus:
 
 - Tool status olarak index durumunu gösterir.
-- Frontend panelinden `status`, `analyze --index-only`, `analyze --index-only --force` ve `query` çalıştırabilir.
+- Frontend panelinden `status`, `analyze --skip-git --skip-agents-md --skip-skills`, `analyze --force --skip-git --skip-agents-md --skip-skills` ve `query` çalıştırabilir.
 - Query komutunda GitNexus registry etiketi kullanılır; örneğin `D:\PROGRAMMING\abey` için `-r abey`.
 - Target repoya zorunlu dependency olarak kurulmaz; PyShield managed toolchain veya PATH kullanılır.
 
 Örnek:
 
 ```powershell
-gitnexus analyze D:\PROGRAMMING\abey --index-only --force
+gitnexus analyze D:\PROGRAMMING\abey --force --skip-git --skip-agents-md --skip-skills
 gitnexus status
 gitnexus query -r abey "worker runtime flow"
 ```
 
-PyShield frontend içindeki GitNexus Graph ekranı aynı işlemleri Tauri command üzerinden çalıştırır ve JSON çıktısını node/edge görünümüne dönüştürür. GitNexus status "up-to-date" olsa bile query çıktısında FTS warning varsa UI bunu ayrı sağlık sinyali olarak gösterir; kullanıcı force rebuild çalıştırabilir.
+PyShield frontend içindeki GitNexus Graph ekranı aynı işlemleri Tauri command üzerinden çalıştırır ve JSON çıktısını node/edge görünümüne dönüştürür. GitNexus status "up-to-date" olsa bile query çıktısında FTS warning varsa UI bunu ayrı sağlık sinyali olarak gösterir; kullanıcı force rebuild çalıştırabilir. `gitnexus query` boş + FTS warning döndürürse PyShield backend otomatik `gitnexus cypher` keyword fallback çalıştırır ve bulunan node'ları `definitions` alanına ekler.
 
-AI Workbench ve GitNexus Graph ekranları boş query sonucu veya FTS indeks uyarısını özel callout olarak gösterir; callout içinden `analyze --index-only --force` tetiklenebilir.
+AI Workbench ve GitNexus Graph ekranları boş query sonucu veya FTS indeks uyarısını özel callout olarak gösterir; callout içinden dosya enjeksiyonsuz `analyze --force` tetiklenebilir.
 
 ## AI Provider Ayarları
 
