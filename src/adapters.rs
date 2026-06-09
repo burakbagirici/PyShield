@@ -96,7 +96,7 @@ impl AnalyzerAdapter for RuffAdapter {
             &["check", ".", "--output-format", "json", "--exit-zero"],
             root,
         )?;
-        parse_ruff_output(root, &output.stdout)
+        parse_ruff_output(root, &command_output_text(&output))
     }
 }
 
@@ -497,13 +497,10 @@ pub fn run_gitnexus_analyze(project_path: &str, force: bool) -> Result<String, S
     let root = Path::new(project_path);
     let command = find_tool_command(project_path, "gitnexus")
         .ok_or_else(|| "gitnexus PyShield araç seti veya PATH içinde bulunamadı.".to_string())?;
-    let mut args = vec![
-        "analyze",
-        project_path,
-        "--skip-git",
-        "--skip-agents-md",
-        "--skip-skills",
-    ];
+    let mut args = vec!["analyze", "--skip-agents-md", "--skip-skills"];
+    if !is_git_repository(root) {
+        args.push("--skip-git");
+    }
     if force {
         args.push("--force");
     }
@@ -514,6 +511,18 @@ pub fn run_gitnexus_analyze(project_path: &str, force: bool) -> Result<String, S
     } else {
         Err(compact_tool_message(&text))
     }
+}
+
+fn is_git_repository(root: &Path) -> bool {
+    if root.join(".git").exists() {
+        return true;
+    }
+    Command::new("git")
+        .current_dir(root)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
 }
 
 pub fn run_gitnexus_query(project_path: &str, query: &str, limit: usize) -> Result<String, String> {
@@ -784,9 +793,19 @@ struct RuffFix {
     message: Option<String>,
 }
 
-fn parse_ruff_output(root: &Path, bytes: &[u8]) -> Result<Vec<Issue>, String> {
+fn parse_ruff_output(root: &Path, text: &str) -> Result<Vec<Issue>, String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let json_start = trimmed.find('[').unwrap_or(0);
+    let json_end = trimmed
+        .rfind(']')
+        .map(|idx| idx + 1)
+        .unwrap_or(trimmed.len());
+    let json_text = &trimmed[json_start..json_end];
     let findings: Vec<RuffFinding> =
-        serde_json::from_slice(bytes).map_err(|e| format!("ruff JSON parse hatası: {}", e))?;
+        serde_json::from_str(json_text).map_err(|e| format!("ruff JSON parse hatası: {}", e))?;
     Ok(findings
         .into_iter()
         .map(|finding| {

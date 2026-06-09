@@ -199,7 +199,9 @@
     }
 
     .scan-target:hover { background: #edf4f7; color: var(--text); }
-    .scan-target.active { background: var(--primary); color: #ffffff; }
+    .scan-target.ran { background: var(--ok-soft); color: var(--ok); box-shadow: inset 0 0 0 1px #a8dec0; }
+    .scan-target.active { background: #2563a9; color: #ffffff; box-shadow: inset 0 0 0 1px #1c568f; }
+    .scan-target.active.ran { background: var(--primary); color: #ffffff; box-shadow: inset 0 0 0 1px var(--primary-dark); }
 
     .btn {
       min-height: 38px;
@@ -391,6 +393,9 @@
     .badge.info { color: #1b4f80; background: var(--info-soft); border-color: #b9d6ee; }
     .badge.ok { color: #1e5e3d; background: var(--ok-soft); border-color: #a8dec0; }
     .badge.muted { color: #52606f; background: #edf2f7; border-color: var(--border); }
+    .badge.critical { color: #7f1d1d; background: #fee2e2; border-color: #f5aaaa; }
+    .badge.high { color: #754b05; background: var(--warning-soft); border-color: #edc970; }
+    .badge.review { color: #1b4f80; background: var(--info-soft); border-color: #b9d6ee; }
 
     .tool-strip {
       display: grid;
@@ -405,6 +410,7 @@
       background: var(--surface-soft);
       min-height: 74px;
     }
+    .tool-item.active-tool { border-color: #6aa7d8; box-shadow: 0 0 0 3px rgba(37,99,169,0.12); }
     .tool-item strong {
       display: block;
       font-size: 13px;
@@ -798,6 +804,7 @@
             <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="m10 17 6-5-6-5v10ZM4 4h2v16H4V4Zm16 0h-2v16h2V4Z"/></svg>
             Run Scan
           </button>
+          <button id="btn-force-rescan" class="btn warning" type="button">Force Rescan</button>
           <button id="btn-git-status-top" class="btn icon-only" type="button" title="GitNexus status">
             <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.05-4.95L14 10h7V3l-2.63 2.63A8.96 8.96 0 0 0 12 3Z"/></svg>
           </button>
@@ -847,6 +854,18 @@
               <section class="panel">
                 <div class="panel-header">
                   <div>
+                    <h2 class="panel-title">Common Findings</h2>
+                    <p class="panel-subtitle">Birden fazla araçla doğrulanan dosya/satır bulguları.</p>
+                  </div>
+                </div>
+                <div id="common-findings" class="panel-body detail-block">
+                  <div class="empty">Ortak bulgu yok.</div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
                     <h2 class="panel-title">Issue Triage</h2>
                     <p class="panel-subtitle"><span id="issue-count-label">0</span> bulgu filtreleniyor.</p>
                   </div>
@@ -861,6 +880,8 @@
                     <thead>
                       <tr>
                         <th>Severity</th>
+                        <th>Priority</th>
+                        <th>Strength</th>
                         <th>Tool</th>
                         <th>Rule</th>
                         <th>File</th>
@@ -919,6 +940,8 @@
                   <select id="issues-severity" class="select"><option value="">Severity</option></select>
                   <select id="issues-tool" class="select"><option value="">Tool</option></select>
                   <select id="issues-category" class="select"><option value="">Category</option></select>
+                  <button id="btn-export-csv" class="btn" type="button">CSV</button>
+                  <button id="btn-export-xlsx" class="btn" type="button">Excel</button>
                 </div>
               </div>
               <div class="table-wrap">
@@ -926,6 +949,8 @@
                   <thead>
                     <tr>
                       <th>Severity</th>
+                      <th>Priority</th>
+                      <th>Strength</th>
                       <th>Category</th>
                       <th>Tool</th>
                       <th>Rule</th>
@@ -1081,6 +1106,7 @@
     const state = {
       report: null,
       issues: [],
+      commonFindings: [],
       selectedIssueId: null,
       selectedGraphNode: null,
       providers: [],
@@ -1148,11 +1174,37 @@
       }
     }
 
+    function normalizeToolName(tool) {
+      const value = String(tool || '').toLowerCase();
+      return value === 'native' ? 'pyshield' : value;
+    }
+
+    function toolsForTarget(target) {
+      switch (target) {
+        case 'full':
+          return ['pyshield', 'ruff', 'bandit', 'pyright', 'gitnexus'];
+        case 'native':
+          return ['pyshield'];
+        default:
+          return [normalizeToolName(target)];
+      }
+    }
+
     function selectScanTarget(target) {
       state.scanTarget = target || 'native';
       localStorage.setItem('pyshield.scanTarget', state.scanTarget);
+      renderScanTargetState();
+    }
+
+    function renderScanTargetState() {
+      const ran = new Set(normalizedToolStatuses(state.report)
+        .filter((status) => !['idle', 'not_run'].includes(status.status))
+        .map((status) => normalizeToolName(status.tool)));
       document.querySelectorAll('.scan-target').forEach((button) => {
+        const targetTools = toolsForTarget(button.dataset.scanTarget);
+        const targetRan = targetTools.every((tool) => ran.has(tool));
         button.classList.toggle('active', button.dataset.scanTarget === state.scanTarget);
+        button.classList.toggle('ran', targetRan);
       });
     }
 
@@ -1186,6 +1238,33 @@
       return 2;
     }
 
+    function priorityForIssue(issue) {
+      const category = String(issue.category || '').toLowerCase();
+      const severity = String(issue.severity || '').toUpperCase();
+      const rule = String(issue.rule_id || '').toUpperCase();
+      if (category.includes('güvenlik') || category.includes('security') || /^S\d+/.test(rule) || /^B60[2-8]/.test(rule)) {
+        return { label: 'P0 Güvenlik/API', className: 'critical', rank: 0 };
+      }
+      if (category.includes('sözdizimi') || category.includes('sonsuz')) {
+        return { label: 'P0 Çalışma', className: 'critical', rank: 0 };
+      }
+      if (category.includes('tanımsız') || category.includes('import') || severity === 'ERROR') {
+        return { label: 'P1 Doğruluk', className: 'high', rank: 1 };
+      }
+      if (category.includes('halüsinasyon') || category.includes('type')) {
+        return { label: 'P2 İnceleme', className: 'review', rank: 2 };
+      }
+      return { label: 'P3 Bakım', className: 'muted', rank: 3 };
+    }
+
+    function supportKey(issue) {
+      return [
+        String(issue.file_path || '').replaceAll('\\\\', '/').replaceAll('\\', '/').toLowerCase(),
+        issue.line || 0,
+        String(issue.category || '').toLowerCase(),
+      ].join('|');
+    }
+
     function unique(values) {
       return [...new Set(values.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
     }
@@ -1211,8 +1290,33 @@
           file_breakdown: file.error_breakdown,
           key: issueKey({ ...issue, file_path: issue.file_path || file.file_path }),
         }))
-      ).sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
-      return issues.map((issue, index) => ({ ...issue, id: `issue-${index}` }));
+      );
+      const groups = new Map();
+      issues.forEach((issue) => {
+        const key = supportKey(issue);
+        if (!groups.has(key)) groups.set(key, new Set());
+        groups.get(key).add(normalizeToolName(issue.tool || 'pyshield'));
+      });
+      const enriched = issues.map((issue) => {
+        const key = supportKey(issue);
+        const tools = [...(groups.get(key) || new Set())].sort();
+        const priority = priorityForIssue(issue);
+        return {
+          ...issue,
+          support_key: key,
+          support_tools: tools,
+          support_count: tools.length || 1,
+          is_common: tools.length > 1,
+          priority_label: priority.label,
+          priority_class: priority.className,
+          priority_rank: priority.rank,
+        };
+      }).sort((a, b) =>
+        a.priority_rank - b.priority_rank ||
+        severityRank(a.severity) - severityRank(b.severity) ||
+        b.support_count - a.support_count
+      );
+      return enriched.map((issue, index) => ({ ...issue, id: `issue-${index}` }));
     }
 
     function applyIssueFilters(source = state.issues, prefix = 'filter') {
@@ -1232,9 +1336,39 @@
       });
     }
 
+    function setReport(report) {
+      state.report = report?.summary ? report : null;
+      state.issues = state.report ? flattenIssues(state.report) : [];
+      state.commonFindings = buildCommonFindings(state.issues);
+      state.selectedIssueId = state.issues[0]?.id || null;
+      renderAll();
+    }
+
+    function buildCommonFindings(issues) {
+      const groups = new Map();
+      issues.forEach((issue) => {
+        if (!issue.is_common) return;
+        if (!groups.has(issue.support_key)) {
+          groups.set(issue.support_key, {
+            key: issue.support_key,
+            file_path: issue.file_path,
+            line: issue.line,
+            category: issue.category,
+            message: issue.message,
+            tools: issue.support_tools,
+            strength: issue.support_count,
+            priority_label: issue.priority_label,
+            priority_class: issue.priority_class,
+          });
+        }
+      });
+      return [...groups.values()].sort((a, b) => b.strength - a.strength);
+    }
+
     function renderMetrics(report) {
       const summary = report?.summary || {};
-      const critical = (summary.syntax_errors || 0) + (summary.security_issues || 0);
+      const critical = state.issues.filter((issue) => issue.priority_rank <= 1).length ||
+        ((summary.syntax_errors || 0) + (summary.security_issues || 0));
       $('metric-files').textContent = report?.total_files_scanned ?? 0;
       $('metric-total').textContent = report?.total_errors_found ?? 0;
       $('metric-critical').textContent = critical;
@@ -1247,25 +1381,25 @@
       $('metric-tools-note').textContent = statuses.some((s) => s.status === 'error' || s.status === 'unavailable')
         ? 'Aksiyon gerekli'
         : 'Araçlar hazır';
+      renderScanTargetState();
     }
 
     function normalizedToolStatuses(report = state.report) {
       const statuses = asArray(report?.tool_statuses).map((status) => ({
-        tool: status.tool || 'tool',
+        tool: normalizeToolName(status.tool || 'tool'),
         status: status.status || (status.available ? 'ok' : 'unavailable'),
         available: Boolean(status.available),
         message: status.message || '',
         issue_count: status.issue_count || 0,
       }));
       const known = new Map(statuses.map((status) => [status.tool.toLowerCase(), status]));
-      const nativeRan = state.lastScanTools.includes('native') || state.lastScanTools.includes('full');
       if (!known.has('pyshield')) {
         statuses.unshift({
           tool: 'pyshield',
-          status: report && nativeRan ? 'ok' : report ? 'not_run' : 'idle',
+          status: report ? 'not_run' : 'idle',
           available: true,
-          message: report && nativeRan ? `${report.total_files_scanned || 0} dosya native scan` : report ? 'Bu çalıştırmada seçilmedi' : 'Native Rust analyzer hazır',
-          issue_count: report?.total_errors_found || 0,
+          message: report ? 'Bu projede cache yok' : 'Native Rust analyzer hazır',
+          issue_count: state.issues.filter((issue) => normalizeToolName(issue.tool) === 'pyshield').length,
         });
       }
       for (const name of ['ruff', 'bandit', 'pyright', 'gitnexus']) {
@@ -1274,18 +1408,24 @@
             tool: name,
             status: report ? 'not_run' : 'idle',
             available: false,
-            message: report ? 'Native scan modunda çalışmadı' : 'Durum bekliyor',
+            message: report ? 'Bu projede cache yok' : 'Durum bekliyor',
             issue_count: 0,
           });
         }
       }
-      return statuses.slice(0, 5);
+      return statuses
+        .map((status) => ({
+          ...status,
+          issue_count: state.issues.filter((issue) => normalizeToolName(issue.tool) === status.tool).length || status.issue_count,
+        }))
+        .slice(0, 5);
     }
 
     function renderToolStrip(report = state.report) {
       $('tool-strip').innerHTML = normalizedToolStatuses(report).map((status) => {
         const cls = status.status === 'ok' ? 'ok' : status.status === 'idle' || status.status === 'not_run' ? 'muted' : 'warning';
-        return `<div class="tool-item">
+        const active = toolsForTarget(state.scanTarget).includes(status.tool) ? 'active-tool' : '';
+        return `<div class="tool-item ${active}">
           <strong>${escapeHtml(status.tool)}</strong>
           <span class="badge ${cls}">${escapeHtml(status.status)}</span>
           <small>${escapeHtml(status.message || `${status.issue_count} bulgu`)}</small>
@@ -1308,7 +1448,7 @@
       const body = $(targetId);
       const visible = issues.slice(0, limit);
       if (!visible.length) {
-        const colspan = targetId === 'issues-table' ? 7 : 6;
+        const colspan = targetId === 'issues-table' ? 9 : 8;
         body.innerHTML = `<tr><td colspan="${colspan}"><div class="empty">Filtreye uyan bulgu yok.</div></td></tr>`;
         return;
       }
@@ -1317,6 +1457,8 @@
         const categoryCell = targetId === 'issues-table' ? `<td>${escapeHtml(issue.category || '')}</td>` : '';
         return `<tr class="${selected}" data-issue-id="${escapeHtml(issue.id)}">
           <td><span class="badge ${severityClass(issue.severity)}">${escapeHtml(issue.severity || 'INFO')}</span></td>
+          <td><span class="badge ${escapeHtml(issue.priority_class || 'muted')}">${escapeHtml(issue.priority_label || 'P3 Bakım')}</span></td>
+          <td><span class="badge ${issue.is_common ? 'ok' : 'muted'}">${escapeHtml(issue.support_count || 1)} tool</span></td>
           ${categoryCell}
           <td>${escapeHtml(issue.tool || 'pyshield')}</td>
           <td>${escapeHtml(issue.rule_id || '')}</td>
@@ -1338,7 +1480,29 @@
       $('issue-count-label').textContent = overviewIssues.length;
       renderIssueRows('overview-issues', overviewIssues, 80);
       renderIssueRows('issues-table', issuesView, 500);
+      renderCommonFindings();
       renderIssueDetail();
+    }
+
+    function renderCommonFindings() {
+      const el = $('common-findings');
+      if (!state.commonFindings.length) {
+        el.innerHTML = '<div class="empty">Ortak bulgu yok.</div>';
+        return;
+      }
+      el.innerHTML = state.commonFindings.slice(0, 8).map((item) => `
+        <button type="button" class="btn" style="justify-content:flex-start;width:100%" data-common-key="${escapeHtml(item.key)}">
+          <span class="badge ${escapeHtml(item.priority_class)}">${escapeHtml(item.priority_label)}</span>
+          <span class="badge ok">${escapeHtml(item.strength)} tool</span>
+          <span>${escapeHtml(shortPath(item.file_path || ''))}:${escapeHtml(item.line || 1)}</span>
+        </button>
+      `).join('');
+      el.querySelectorAll('[data-common-key]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const issue = state.issues.find((item) => item.support_key === button.dataset.commonKey);
+          if (issue) selectIssue(issue.id);
+        });
+      });
     }
 
     function selectIssue(id) {
@@ -1370,6 +1534,9 @@
     function issueDetailHtml(issue) {
       return `
         <div class="kv"><span>Severity</span><strong><span class="badge ${severityClass(issue.severity)}">${escapeHtml(issue.severity || 'INFO')}</span></strong></div>
+        <div class="kv"><span>Priority</span><strong><span class="badge ${escapeHtml(issue.priority_class || 'muted')}">${escapeHtml(issue.priority_label || 'P3 Bakım')}</span></strong></div>
+        <div class="kv"><span>Strength</span><strong><span class="badge ${issue.is_common ? 'ok' : 'muted'}">${escapeHtml(issue.support_count || 1)} tool</span></strong></div>
+        <div class="kv"><span>Also Found</span><strong>${escapeHtml((issue.support_tools || []).join(', ') || issue.tool || 'pyshield')}</strong></div>
         <div class="kv"><span>Tool</span><strong>${escapeHtml(issue.tool || 'pyshield')}</strong></div>
         <div class="kv"><span>Rule</span><strong>${escapeHtml(issue.rule_id || '')}</strong></div>
         <div class="kv"><span>Category</span><strong>${escapeHtml(issue.category || '')}</strong></div>
@@ -1398,27 +1565,60 @@
       if (!selected) return;
       $('project-path').value = Array.isArray(selected) ? selected[0] : selected;
       localStorage.setItem('pyshield.projectPath', $('project-path').value);
-      renderMetrics(state.report);
+      await loadCachedAnalysis(false);
     }
 
-    async function runScan() {
+    async function loadCachedAnalysis(showToast = false) {
+      const folderPath = projectPath();
+      if (!folderPath || !hasTauriApi()) {
+        setReport(null);
+        return;
+      }
+      try {
+        const raw = await invoke('load_cached_analysis', { folderPath });
+        const report = parseJson(raw);
+        if (report?.summary) {
+          setReport(report);
+          if (showToast) toast('Cache raporu yüklendi');
+        } else {
+          setReport(null);
+        }
+      } catch (error) {
+        setReport(null);
+        if (showToast) toast(`Cache okunamadı: ${error.message || error}`);
+      }
+    }
+
+    async function runScan(forceRescan = false) {
       const folderPath = projectPath();
       if (!folderPath) return toast('Proje path boş.');
       localStorage.setItem('pyshield.projectPath', folderPath);
-      setBusy(true, 'Scan çalışıyor');
+      setBusy(true, forceRescan ? 'Force rescan çalışıyor' : 'Scan çalışıyor');
       try {
         const selectedTools = selectedScanTools();
-        const raw = await invoke('run_analysis_on_folder', { folderPath, selectedTools });
+        const raw = await invoke('run_analysis_on_folder', { folderPath, selectedTools, forceRescan });
         const report = parseJson(raw);
-        if (!report?.summary) throw new Error('Analiz yanıtında summary yok.');
+        if (!report?.summary) throw new Error('Analiz/cache yanıtında summary yok.');
         state.lastScanTools = selectedTools;
-        state.report = report;
-        state.issues = flattenIssues(report);
-        state.selectedIssueId = state.issues[0]?.id || null;
-        renderAll();
-        toast(`${selectedTools.join(', ')} scan tamamlandı: ${state.issues.length} bulgu`);
+        setReport(report);
+        toast(`${selectedTools.join(', ')} ${forceRescan ? 'force rescan' : 'scan'} tamamlandı: ${state.issues.length} birleşik bulgu`);
       } catch (error) {
         toast(`Scan hatası: ${error.message || error}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function exportReport(format) {
+      const folderPath = projectPath();
+      if (!folderPath) return toast('Proje path boş.');
+      if (!state.issues.length) return toast('Export için önce analiz bulgusu gerekli.');
+      setBusy(true, `${format.toUpperCase()} export`);
+      try {
+        const path = await invoke('export_analysis_report', { folderPath, format });
+        toast(`${format.toUpperCase()} export hazır: ${path}`);
+      } catch (error) {
+        toast(`Export hatası: ${error.message || error}`);
       } finally {
         setBusy(false);
       }
@@ -1432,6 +1632,7 @@
         const raw = await invoke('run_gitnexus_status', { folderPath });
         const status = parseJson(raw);
         renderGitStatus(status);
+        await loadCachedAnalysis(false);
         toast('GitNexus status güncellendi');
       } catch (error) {
         renderGitStatus({ tool: 'gitnexus', status: 'error', available: true, message: error.message || String(error) });
@@ -1819,7 +2020,8 @@
         button.addEventListener('click', () => selectScanTarget(button.dataset.scanTarget));
       });
       $('btn-pick-folder').addEventListener('click', pickFolder);
-      $('btn-run-scan').addEventListener('click', runScan);
+      $('btn-run-scan').addEventListener('click', () => runScan(false));
+      $('btn-force-rescan').addEventListener('click', () => runScan(true));
       $('btn-git-status-top').addEventListener('click', runGitStatus);
       $('btn-refresh-status').addEventListener('click', runGitStatus);
       $('btn-git-status').addEventListener('click', runGitStatus);
@@ -1844,9 +2046,11 @@
       $('btn-provider-save').addEventListener('click', saveProvider);
       $('btn-provider-delete').addEventListener('click', deleteProvider);
       $('btn-ai-query').addEventListener('click', runAiGitNexus);
-      $('project-path').addEventListener('change', () => {
+      $('btn-export-csv').addEventListener('click', () => exportReport('csv'));
+      $('btn-export-xlsx').addEventListener('click', () => exportReport('xlsx'));
+      $('project-path').addEventListener('change', async () => {
         localStorage.setItem('pyshield.projectPath', $('project-path').value.trim());
-        renderMetrics(state.report);
+        await loadCachedAnalysis(false);
       });
     }
 
@@ -1860,6 +2064,7 @@
       renderIssues();
       renderGraph();
       loadProviders();
+      loadCachedAnalysis(false);
       const initialView = location.hash.replace('#', '');
       if (['overview', 'issues', 'graph', 'ai', 'settings'].includes(initialView)) {
         showView(initialView, false);

@@ -268,6 +268,7 @@ fn gitnexus_analyze_uses_full_rebuild_without_file_injection() {
     let _ = fs::remove_dir_all(&root);
     let _ = fs::remove_dir_all(&tools_root);
     fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(root.join(".git")).unwrap();
     fs::create_dir_all(&node_bin).unwrap();
     fs::write(root.join("sample.py"), "print('ok')\n").unwrap();
     fs::write(
@@ -300,10 +301,10 @@ fn gitnexus_analyze_uses_full_rebuild_without_file_injection() {
 
     let args = fs::read_to_string(&args_file).unwrap();
     assert!(args.contains("analyze"));
-    assert!(args.contains("--skip-git"));
     assert!(args.contains("--skip-agents-md"));
     assert!(args.contains("--skip-skills"));
     assert!(args.contains("--force"));
+    assert!(!args.contains("--skip-git"));
     assert!(!args.contains("--index-only"));
 
     fs::remove_dir_all(root).unwrap();

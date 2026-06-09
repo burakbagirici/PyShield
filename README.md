@@ -182,14 +182,14 @@ npm run tools:install
 GitNexus, repoyu knowledge graph olarak indexleyen ve execution-flow sorguları sağlayan CLI/MCP aracıdır. PyShield içinde GitNexus:
 
 - Tool status olarak index durumunu gösterir.
-- Frontend panelinden `status`, `analyze --skip-git --skip-agents-md --skip-skills`, `analyze --force --skip-git --skip-agents-md --skip-skills` ve `query` çalıştırabilir.
+- Frontend panelinden `status`, `analyze --skip-agents-md --skip-skills`, `analyze --force --skip-agents-md --skip-skills` ve `query` çalıştırabilir.
 - Query komutunda GitNexus registry etiketi kullanılır; örneğin `D:\PROGRAMMING\abey` için `-r abey`.
 - Target repoya zorunlu dependency olarak kurulmaz; PyShield managed toolchain veya PATH kullanılır.
 
 Örnek:
 
 ```powershell
-gitnexus analyze D:\PROGRAMMING\abey --force --skip-git --skip-agents-md --skip-skills
+gitnexus analyze --force --skip-agents-md --skip-skills
 gitnexus status
 gitnexus query -r abey "worker runtime flow"
 ```
