@@ -623,6 +623,54 @@ fn collect_with_aliases<'a>(root_node: Node<'a>, source_code: &'a str) -> Vec<&'
     aliases
 }
 
+fn collect_binding_names_from_kind<'a>(
+    root_node: Node<'a>,
+    source_code: &'a str,
+    kind: &str,
+) -> Vec<&'a str> {
+    let mut nodes = Vec::new();
+    collect_nodes_by_kind(root_node, kind, &mut nodes);
+
+    let mut names = Vec::new();
+    for node in nodes {
+        let mut binding_nodes = Vec::new();
+        collect_binding_identifiers(node, &mut binding_nodes);
+        for binding_node in binding_nodes {
+            if let Ok(name) = binding_node.utf8_text(source_code.as_bytes()) {
+                names.push(name);
+            }
+        }
+    }
+
+    names
+}
+
+fn collect_first_named_child_binding_names_from_kind<'a>(
+    root_node: Node<'a>,
+    source_code: &'a str,
+    kind: &str,
+) -> Vec<&'a str> {
+    let mut nodes = Vec::new();
+    collect_nodes_by_kind(root_node, kind, &mut nodes);
+
+    let mut names = Vec::new();
+    for node in nodes {
+        let Some(target_node) = node.named_child(0) else {
+            continue;
+        };
+
+        let mut binding_nodes = Vec::new();
+        collect_binding_identifiers(target_node, &mut binding_nodes);
+        for binding_node in binding_nodes {
+            if let Ok(name) = binding_node.utf8_text(source_code.as_bytes()) {
+                names.push(name);
+            }
+        }
+    }
+
+    names
+}
+
 fn has_ancestor_kind(node: Node, kinds: &[&str]) -> bool {
     let mut current = node.parent();
     while let Some(parent) = current {
@@ -659,6 +707,21 @@ pub fn find_defined_variables<'a>(root_node: Node<'a>, source_code: &'a str) -> 
 
     for alias in collect_with_aliases(root_node, source_code) {
         defined_vars.push(alias);
+    }
+
+    for alias in collect_binding_names_from_kind(root_node, source_code, "as_pattern_target") {
+        defined_vars.push(alias);
+    }
+
+    for lambda_param in collect_binding_names_from_kind(root_node, source_code, "lambda_parameters")
+    {
+        defined_vars.push(lambda_param);
+    }
+
+    for comprehension_target in
+        collect_first_named_child_binding_names_from_kind(root_node, source_code, "for_in_clause")
+    {
+        defined_vars.push(comprehension_target);
     }
 
     for class_name in find_class_definitions(root_node, source_code) {
@@ -1187,6 +1250,10 @@ pub fn find_hardcoded_secrets<'a, 'b>(
                     continue;
                 }
 
+                if content.starts_with("vault:") || content.starts_with("vault://") {
+                    continue;
+                }
+
                 let row = lhs_node.start_position().row + 1;
 
                 // Kontrol 1: API key prefix'i var mı?
@@ -1413,7 +1480,10 @@ mod tests {
     #[test]
     fn test_hardcoded_secrets() {
         // Güvenlik kuralımızın sızan API keyleri yakaladığını test ediyoruz
-        let source = "openai_key = \"sk-proj-AiZaFakeKey12345\"";
+        let source = r#"
+openai_key = "sk-proj-AiZaFakeKey12345"
+API_VAULT_SECRET_REF_AUTH_SHARED_SECRET = "vault:runtime/api_auth_shared_secret"
+"#;
         let tree = crate::parser::parse_python_code(source).unwrap();
         let root = tree.root_node();
 

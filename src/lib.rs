@@ -66,7 +66,7 @@ impl Default for AnalysisOptions {
 
 fn should_report_error_for_line(line_number: usize, source_code: &str) -> bool {
     if let Some(line) = source_code.lines().nth(line_number) {
-        !(line.contains("# noqa") || line.contains("# analiz-atla"))
+        !(line.contains("# noqa") || line.contains("# nosec") || line.contains("# analiz-atla"))
     } else {
         true
     }

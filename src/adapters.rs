@@ -899,7 +899,11 @@ fn parse_bandit_output(root: &Path, bytes: &[u8]) -> Result<Vec<Issue>, String> 
 }
 
 fn should_suppress_bandit_finding(finding: &BanditFinding, file_path: &str) -> bool {
-    finding.test_id == "B101" && is_test_path(file_path)
+    is_test_path(file_path)
+        && matches!(
+            finding.test_id.as_str(),
+            "B101" | "B105" | "B106" | "B108" | "B310"
+        )
 }
 
 #[derive(Deserialize)]
