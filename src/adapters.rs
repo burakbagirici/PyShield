@@ -1124,9 +1124,12 @@ fn normalize_dependency_name(name: &str) -> String {
 fn dependency_import_aliases(name: &str) -> &'static [&'static str] {
     match name {
         "beautifulsoup4" => &["bs4"],
+        "graphql_core" => &["graphql"],
         "pillow" => &["pil"],
+        "python_docx" => &["docx"],
         "pyyaml" => &["yaml"],
         "python_dotenv" => &["dotenv"],
+        "strawberry_graphql" => &["strawberry"],
         _ => &[],
     }
 }

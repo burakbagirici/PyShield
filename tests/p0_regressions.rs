@@ -160,7 +160,7 @@ fn external_adapters_merge_managed_tool_outputs() {
     fs::write(root.join("tests").join("test_sample.py"), "assert True\n").unwrap();
     fs::write(
         root.join("pyproject.toml"),
-        "[project]\ndependencies = [\"asyncpg>=0.29.0\"]\n",
+        "[project]\ndependencies = [\"asyncpg>=0.29.0\", \"graphql-core>=3.2.8\", \"python-docx>=1.2.0\", \"strawberry-graphql[fastapi]>=0.278.0\"]\n",
     )
     .unwrap();
     fs::write(
@@ -175,7 +175,7 @@ fn external_adapters_merge_managed_tool_outputs() {
     .unwrap();
     fs::write(
         node_bin.join("pyright.cmd"),
-        "@echo off\r\nif \"%1\"==\"--version\" (echo pyright 0.0.0& exit /b 0)\r\necho {\"generalDiagnostics\":[{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Import \\\"asyncpg\\\" could not be resolved\",\"rule\":\"reportMissingImports\",\"range\":{\"start\":{\"line\":0,\"character\":0}}},{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Undefined variable\",\"rule\":\"reportUndefinedVariable\",\"range\":{\"start\":{\"line\":0,\"character\":0}}}]}\r\n",
+        "@echo off\r\nif \"%1\"==\"--version\" (echo pyright 0.0.0& exit /b 0)\r\necho {\"generalDiagnostics\":[{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Import \\\"asyncpg\\\" could not be resolved\",\"rule\":\"reportMissingImports\",\"range\":{\"start\":{\"line\":0,\"character\":0}}},{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Import \\\"graphql\\\" could not be resolved\",\"rule\":\"reportMissingImports\",\"range\":{\"start\":{\"line\":0,\"character\":0}}},{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Import \\\"docx\\\" could not be resolved\",\"rule\":\"reportMissingImports\",\"range\":{\"start\":{\"line\":0,\"character\":0}}},{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Import \\\"strawberry\\\" could not be resolved\",\"rule\":\"reportMissingImports\",\"range\":{\"start\":{\"line\":0,\"character\":0}}},{\"file\":\"sample.py\",\"severity\":\"error\",\"message\":\"Undefined variable\",\"rule\":\"reportUndefinedVariable\",\"range\":{\"start\":{\"line\":0,\"character\":0}}}]}\r\n",
     )
     .unwrap();
     fs::write(
