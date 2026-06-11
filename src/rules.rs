@@ -1057,6 +1057,7 @@ pub fn find_unused_code<'a>(
     source_code: &'a str,
 ) -> Vec<(&'a str, usize, &'static str)> {
     let mut unused = Vec::new();
+    let exported_names = collect_dunder_all_exports(source_code);
 
     // --- Kullanılan tüm identifier'ları topla ---
     // (Sadece "kullanım" context'lerinden: atama solu değil, import tanımı değil)
@@ -1106,6 +1107,9 @@ pub fn find_unused_code<'a>(
         if import.is_wildcard {
             continue;
         }
+        if import.local_name.starts_with('_') || exported_names.contains(import.local_name) {
+            continue;
+        }
         if !used_names.contains(&import.local_name) {
             unused.push((import.local_name, import.line, "import"));
         }
@@ -1131,10 +1135,16 @@ pub fn find_unused_code<'a>(
                 if is_class_scope_binding(binding_node) {
                     continue;
                 }
+                if is_module_scope_binding(binding_node) {
+                    continue;
+                }
                 if let Ok(var_name) = binding_node.utf8_text(source_code.as_bytes()) {
                     let row = binding_node.start_position().row + 1;
                     // "_" ile başlayanlar (konvansiyonel olarak kasıtlı unused)
                     if var_name.starts_with('_') {
+                        continue;
+                    }
+                    if exported_names.contains(var_name) {
                         continue;
                     }
                     if !used_names.contains(&var_name) {
@@ -1146,6 +1156,95 @@ pub fn find_unused_code<'a>(
     }
 
     unused
+}
+
+fn collect_dunder_all_exports(source_code: &str) -> HashSet<String> {
+    let mut exports = HashSet::new();
+    let mut in_all_assignment = false;
+    let mut nesting_depth: isize = 0;
+
+    for line in source_code.lines() {
+        let current = if in_all_assignment {
+            line
+        } else {
+            let trimmed = line.trim_start();
+            if !trimmed.starts_with("__all__") || !trimmed.contains('=') {
+                continue;
+            }
+            trimmed.split_once('=').map(|(_, rhs)| rhs).unwrap_or("")
+        };
+
+        in_all_assignment = true;
+        collect_quoted_identifier_strings(current, &mut exports);
+        for ch in current.chars() {
+            match ch {
+                '[' | '(' | '{' => nesting_depth += 1,
+                ']' | ')' | '}' => nesting_depth -= 1,
+                _ => {}
+            }
+        }
+        if nesting_depth <= 0 {
+            in_all_assignment = false;
+            nesting_depth = 0;
+        }
+    }
+
+    exports
+}
+
+fn collect_quoted_identifier_strings(line: &str, exports: &mut HashSet<String>) {
+    let chars: Vec<char> = line.chars().collect();
+    let mut index = 0;
+    while index < chars.len() {
+        let quote = chars[index];
+        if quote != '\'' && quote != '"' {
+            index += 1;
+            continue;
+        }
+
+        let start = index + 1;
+        index = start;
+        let mut escaped = false;
+        while index < chars.len() {
+            let ch = chars[index];
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == quote {
+                let value: String = chars[start..index].iter().collect();
+                if is_python_identifier(&value) {
+                    exports.insert(value);
+                }
+                break;
+            }
+            index += 1;
+        }
+        index += 1;
+    }
+}
+
+fn is_python_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !(first == '_' || first.is_ascii_alphabetic()) {
+        return false;
+    }
+    chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+fn is_module_scope_binding(node: Node) -> bool {
+    let mut current = node.parent();
+    while let Some(parent) = current {
+        match parent.kind() {
+            "function_definition" | "class_definition" | "lambda" => return false,
+            "module" => return true,
+            _ => current = parent.parent(),
+        }
+    }
+    false
 }
 
 /// AKILLI KURAL 4:
@@ -1491,6 +1590,37 @@ API_VAULT_SECRET_REF_AUTH_SHARED_SECRET = "vault:runtime/api_auth_shared_secret"
         // 1 tane güvenlik ihlali yakalamış olmalıyız
         assert_eq!(secrets.len(), 1);
         assert_eq!(secrets[0].0, "openai_key");
+    }
+
+    #[test]
+    fn test_unused_code_respects_public_exports_and_framework_markers() {
+        let source = r#"
+from .contracts import PublicContract
+from .helpers import _internal_helper
+
+__all__ = [
+    "PublicContract",
+]
+
+local_unused = 1
+API_REQUEST_TOTAL = object()
+pytestmark = ["integration"]
+
+def example():
+    dead_value = 2
+"#;
+        let tree = crate::parser::parse_python_code(source).unwrap();
+        let root = tree.root_node();
+
+        let unused = find_unused_code(root, source);
+        let names: Vec<&str> = unused.iter().map(|(name, _, _)| *name).collect();
+
+        assert!(!names.contains(&"PublicContract"));
+        assert!(!names.contains(&"_internal_helper"));
+        assert!(!names.contains(&"API_REQUEST_TOTAL"));
+        assert!(!names.contains(&"pytestmark"));
+        assert!(!names.contains(&"local_unused"));
+        assert!(names.contains(&"dead_value"));
     }
 
     #[test]

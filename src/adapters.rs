@@ -1,11 +1,12 @@
 use crate::{
-    ErrorBreakdown, FileAnalysisResult, Issue, Severity, ToolStatus, issue_from_external_tool,
+    DEFAULT_EXCLUDED_DIRS, ErrorBreakdown, FileAnalysisResult, Issue, Severity, ToolStatus,
+    issue_from_external_tool,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output};
 
 const PYSHIELD_TOOLS_DIR_ENV: &str = "PYSHIELD_TOOLS_DIR";
@@ -199,7 +200,7 @@ pub fn run_external_adapters_with_tools(
 
         match adapter.run(project_path) {
             Ok(issues) => {
-                let issue_count = merge_external_issues(results, issues);
+                let issue_count = merge_external_issues(results, issues, project_path);
                 statuses.push(ToolStatus {
                     tool: adapter.name().to_string(),
                     available: true,
@@ -221,7 +222,11 @@ pub fn run_external_adapters_with_tools(
     statuses
 }
 
-fn merge_external_issues(results: &mut Vec<FileAnalysisResult>, issues: Vec<Issue>) -> usize {
+fn merge_external_issues(
+    results: &mut Vec<FileAnalysisResult>,
+    issues: Vec<Issue>,
+    project_path: &str,
+) -> usize {
     let mut by_file: HashMap<String, usize> = results
         .iter()
         .enumerate()
@@ -229,8 +234,17 @@ fn merge_external_issues(results: &mut Vec<FileAnalysisResult>, issues: Vec<Issu
         .collect();
     let mut seen = collect_existing_issue_keys(results);
     let mut added = 0usize;
+    let project_root = PathBuf::from(normalize_display_path(
+        Path::new(project_path)
+            .canonicalize()
+            .unwrap_or_else(|_| PathBuf::from(project_path)),
+    ));
 
     for issue in issues {
+        if issue_is_in_default_excluded_dir(&project_root, &issue.file_path) {
+            continue;
+        }
+
         let key = issue_key(&issue);
         if !seen.insert(key) {
             continue;
@@ -267,6 +281,24 @@ fn merge_external_issues(results: &mut Vec<FileAnalysisResult>, issues: Vec<Issu
     }
 
     added
+}
+
+fn issue_is_in_default_excluded_dir(project_root: &Path, file_path: &str) -> bool {
+    let path = Path::new(file_path);
+    let relative_path = path.strip_prefix(project_root).unwrap_or(path);
+    path_contains_default_excluded_dir(relative_path)
+}
+
+fn path_contains_default_excluded_dir(path: &Path) -> bool {
+    path.components().any(|component| {
+        let Component::Normal(name) = component else {
+            return false;
+        };
+        let name = name.to_string_lossy();
+        DEFAULT_EXCLUDED_DIRS
+            .iter()
+            .any(|excluded| name.eq_ignore_ascii_case(excluded))
+    })
 }
 
 fn collect_existing_issue_keys(results: &[FileAnalysisResult]) -> HashSet<String> {
