@@ -318,6 +318,10 @@
       gap: 8px;
     }
 
+    .toolbar .input {
+      min-width: 210px;
+    }
+
     .table-wrap {
       overflow: auto;
       max-height: 510px;
@@ -376,6 +380,18 @@
       overflow: hidden;
     }
 
+    .status-cell {
+      min-width: 92px;
+    }
+
+    tbody tr.completed {
+      background: #f1fbf5;
+    }
+
+    tbody tr.review {
+      background: #fffaf0;
+    }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -409,13 +425,40 @@
       padding: 10px;
       background: var(--surface-soft);
       min-height: 74px;
+      display: grid;
+      gap: 7px;
     }
     .tool-item.active-tool { border-color: #6aa7d8; box-shadow: 0 0 0 3px rgba(37,99,169,0.12); }
+    .tool-item-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+    }
     .tool-item strong {
       display: block;
       font-size: 13px;
-      margin-bottom: 7px;
       text-transform: capitalize;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tool-item-delete {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--danger);
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+    }
+    .tool-item-delete:hover {
+      border-color: #efaaa6;
+      background: var(--danger-soft);
     }
     .tool-item small {
       color: var(--muted);
@@ -435,6 +478,19 @@
       color: #334155;
       min-height: 0;
       min-width: 0;
+    }
+
+    .common-findings-body {
+      max-height: 172px;
+      overflow: auto;
+    }
+
+    .common-findings-body.expanded {
+      max-height: min(520px, 46vh);
+    }
+
+    .overview-triage-panel .table-wrap {
+      max-height: min(420px, 42vh);
     }
 
     .detail-block p {
@@ -577,6 +633,23 @@
       color: #5f3d04;
     }
 
+    .issue-actions {
+      display: grid;
+      gap: 8px;
+      padding-top: 4px;
+    }
+
+    .issue-actions-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .workflow-note {
+      min-height: 92px;
+      width: 100%;
+    }
+
     .provider-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -659,24 +732,37 @@
 
     .hidden { display: none !important; }
 
-    #view-issues.active,
+    #view-issues.active {
+      height: calc(100vh - 112px);
+      max-height: calc(100vh - 112px);
+      overflow: hidden;
+      min-height: 0;
+    }
+
     #view-graph.active {
       min-height: calc(100vh - 104px);
     }
 
-    #view-issues .two-col,
     #view-graph > .panel {
       min-height: calc(100vh - 104px);
     }
 
     #view-issues .two-col {
       align-items: stretch;
+      height: 100%;
+      min-height: 0;
     }
 
     #view-issues .panel,
     #view-graph > .panel {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    #view-issues .panel {
+      overflow: hidden;
+      min-height: 0;
+      max-height: 100%;
     }
 
     .selected-issue-panel {
@@ -693,6 +779,11 @@
       max-height: none;
       min-height: 0;
       height: 100%;
+      overflow: auto;
+    }
+
+    #view-issues table {
+      min-width: 1160px;
     }
 
     #view-issues #issues-detail {
@@ -805,6 +896,7 @@
             Run Scan
           </button>
           <button id="btn-force-rescan" class="btn warning" type="button">Force Rescan</button>
+          <button id="btn-delete-results" class="btn danger" type="button">Delete Results</button>
           <button id="btn-git-status-top" class="btn icon-only" type="button" title="GitNexus status">
             <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.05-4.95L14 10h7V3l-2.63 2.63A8.96 8.96 0 0 0 12 3Z"/></svg>
           </button>
@@ -851,19 +943,20 @@
                 </div>
               </section>
 
-              <section class="panel">
+              <section class="panel common-findings-panel">
                 <div class="panel-header">
                   <div>
                     <h2 class="panel-title">Common Findings</h2>
                     <p class="panel-subtitle">Birden fazla araçla doğrulanan dosya/satır bulguları.</p>
                   </div>
+                  <button id="btn-toggle-common" class="btn" type="button">Genişlet</button>
                 </div>
-                <div id="common-findings" class="panel-body detail-block">
+                <div id="common-findings" class="panel-body detail-block common-findings-body">
                   <div class="empty">Ortak bulgu yok.</div>
                 </div>
               </section>
 
-              <section class="panel">
+              <section class="panel overview-triage-panel">
                 <div class="panel-header">
                   <div>
                     <h2 class="panel-title">Issue Triage</h2>
@@ -940,14 +1033,17 @@
                   <select id="issues-severity" class="select"><option value="">Severity</option></select>
                   <select id="issues-tool" class="select"><option value="">Tool</option></select>
                   <select id="issues-category" class="select"><option value="">Category</option></select>
+                  <input id="issues-text" class="input" placeholder="Dosya, kural veya mesaj" />
                   <button id="btn-export-csv" class="btn" type="button">CSV</button>
                   <button id="btn-export-xlsx" class="btn" type="button">Excel</button>
+                  <button id="btn-delete-issues-results" class="btn danger" type="button">Delete Tool Results</button>
                 </div>
               </div>
               <div class="table-wrap">
                 <table>
                   <thead>
                     <tr>
+                      <th>Status</th>
                       <th>Severity</th>
                       <th>Priority</th>
                       <th>Strength</th>
@@ -1103,10 +1199,19 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const TOOL_CATALOG = [
+      { value: 'pyshield', label: 'Native' },
+      { value: 'ruff', label: 'Ruff' },
+      { value: 'bandit', label: 'Bandit' },
+      { value: 'pyright', label: 'Pyright' },
+      { value: 'gitnexus', label: 'GitNexus' },
+    ];
+    const TOOL_LABELS = Object.fromEntries(TOOL_CATALOG.map((tool) => [tool.value, tool.label]));
     const state = {
       report: null,
       issues: [],
       commonFindings: [],
+      commonFindingsExpanded: false,
       selectedIssueId: null,
       selectedGraphNode: null,
       providers: [],
@@ -1179,10 +1284,23 @@
       return value === 'native' ? 'pyshield' : value;
     }
 
+    function toolLabel(tool) {
+      const value = normalizeToolName(tool);
+      return TOOL_LABELS[value] || value || 'Native';
+    }
+
+    function toolSelectionLabel(tools) {
+      const canonical = tools.map(normalizeToolName);
+      if (canonical.length === TOOL_CATALOG.length && TOOL_CATALOG.every((tool) => canonical.includes(tool.value))) {
+        return 'Full';
+      }
+      return canonical.map(toolLabel).join(', ');
+    }
+
     function toolsForTarget(target) {
       switch (target) {
         case 'full':
-          return ['pyshield', 'ruff', 'bandit', 'pyright', 'gitnexus'];
+          return TOOL_CATALOG.map((tool) => tool.value);
         case 'native':
           return ['pyshield'];
         default:
@@ -1197,9 +1315,7 @@
     }
 
     function renderScanTargetState() {
-      const ran = new Set(normalizedToolStatuses(state.report)
-        .filter((status) => !['idle', 'not_run'].includes(status.status))
-        .map((status) => normalizeToolName(status.tool)));
+      const ran = cachedToolSet(state.report);
       document.querySelectorAll('.scan-target').forEach((button) => {
         const targetTools = toolsForTarget(button.dataset.scanTarget);
         const targetRan = targetTools.every((tool) => ran.has(tool));
@@ -1270,10 +1386,14 @@
     }
 
     function fillSelect(id, values, label) {
+      fillSelectOptions(id, values.map((value) => ({ value, label: value })), label);
+    }
+
+    function fillSelectOptions(id, options, label) {
       const select = $(id);
       const old = select.value;
       select.innerHTML = `<option value="">${escapeHtml(label)}</option>` +
-        values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+        options.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join('');
       if ([...select.options].some((option) => option.value === old)) select.value = old;
     }
 
@@ -1281,15 +1401,31 @@
       return [issue.file_path, issue.tool, issue.rule_id, issue.line, issue.column, issue.message].join('|');
     }
 
+    function issueWorkflow(issue) {
+      const status = String(issue.workflow_status || 'open').toLowerCase();
+      if (status === 'completed') return { status, label: 'Completed', badge: 'ok' };
+      if (status === 'review') return { status, label: 'Note', badge: 'warning' };
+      return { status: 'open', label: 'Open', badge: 'muted' };
+    }
+
     function flattenIssues(report) {
       const issues = asArray(report?.files).flatMap((file) =>
-        asArray(file.issues).map((issue) => ({
-          ...issue,
-          file_path: issue.file_path || file.file_path,
-          file_total_errors: file.total_errors,
-          file_breakdown: file.error_breakdown,
-          key: issueKey({ ...issue, file_path: issue.file_path || file.file_path }),
-        }))
+        asArray(file.issues).map((issue) => {
+          const filePath = issue.file_path || file.file_path;
+          const tool = normalizeToolName(issue.tool || 'pyshield');
+          const key = issue.issue_key || issueKey({ ...issue, tool, file_path: filePath });
+          return {
+            ...issue,
+            tool,
+            raw_tool: issue.tool || tool,
+            file_path: filePath,
+            file_total_errors: file.total_errors,
+            file_breakdown: file.error_breakdown,
+            workflow_status: issue.workflow_status || 'open',
+            review_note: issue.review_note || '',
+            key,
+          };
+        })
       );
       const groups = new Map();
       issues.forEach((issue) => {
@@ -1323,24 +1459,33 @@
       const severity = $(`${prefix}-severity`)?.value || '';
       const tool = $(`${prefix}-tool`)?.value || '';
       const category = $(`${prefix}-category`)?.value || '';
-      const text = $('filter-text')?.value.trim().toLowerCase() || '';
+      const textId = prefix === 'issues' ? 'issues-text' : 'filter-text';
+      const text = $(textId)?.value.trim().toLowerCase() || '';
       return source.filter((issue) => {
         if (severity && issue.severity !== severity) return false;
-        if (tool && issue.tool !== tool) return false;
+        if (tool && normalizeToolName(issue.tool) !== normalizeToolName(tool)) return false;
         if (category && issue.category !== category) return false;
         if (text) {
-          const haystack = [issue.file_path, issue.rule_id, issue.category, issue.message, issue.code_snippet].join(' ').toLowerCase();
+          const haystack = [issue.file_path, issue.rule_id, issue.category, issue.message, issue.code_snippet, issue.review_note].join(' ').toLowerCase();
           if (!haystack.includes(text)) return false;
         }
         return true;
       });
     }
 
+    function filteredIssuesFor(prefix = 'issues') {
+      return applyIssueFilters(state.issues, prefix);
+    }
+
     function setReport(report) {
+      const previousIssue = selectedIssue();
+      const previousKey = previousIssue?.key || null;
       state.report = report?.summary ? report : null;
       state.issues = state.report ? flattenIssues(state.report) : [];
       state.commonFindings = buildCommonFindings(state.issues);
-      state.selectedIssueId = state.issues[0]?.id || null;
+      state.selectedIssueId = previousKey
+        ? (state.issues.find((issue) => issue.key === previousKey)?.id || state.issues[0]?.id || null)
+        : (state.issues[0]?.id || null);
       renderAll();
     }
 
@@ -1384,7 +1529,17 @@
       renderScanTargetState();
     }
 
-    function normalizedToolStatuses(report = state.report) {
+    function cachedToolSet(report = state.report) {
+      const cached = asArray(report?.cached_tools).map((item) => normalizeToolName(item.tool));
+      if (cached.length) return new Set(cached);
+      return new Set(normalizedToolStatuses(report, true)
+        .filter((status) => !['idle', 'not_run'].includes(status.status))
+        .map((status) => normalizeToolName(status.tool)));
+    }
+
+    function normalizedToolStatuses(report = state.report, skipCacheFallback = false) {
+      const cached = new Set(asArray(report?.cached_tools).map((item) => normalizeToolName(item.tool)));
+      const hasCacheMetadata = asArray(report?.cached_tools).length > 0;
       const statuses = asArray(report?.tool_statuses).map((status) => ({
         tool: normalizeToolName(status.tool || 'tool'),
         status: status.status || (status.available ? 'ok' : 'unavailable'),
@@ -1416,31 +1571,46 @@
       return statuses
         .map((status) => ({
           ...status,
+          cached: hasCacheMetadata ? cached.has(status.tool) : !['idle', 'not_run'].includes(status.status),
+          status: hasCacheMetadata && !cached.has(status.tool) && !skipCacheFallback ? 'not_run' : status.status,
+          message: hasCacheMetadata && !cached.has(status.tool) && !skipCacheFallback ? 'Bu projede cache yok' : status.message,
           issue_count: state.issues.filter((issue) => normalizeToolName(issue.tool) === status.tool).length || status.issue_count,
         }))
         .slice(0, 5);
     }
 
     function renderToolStrip(report = state.report) {
+      const cached = cachedToolSet(report);
       $('tool-strip').innerHTML = normalizedToolStatuses(report).map((status) => {
         const cls = status.status === 'ok' ? 'ok' : status.status === 'idle' || status.status === 'not_run' ? 'muted' : 'warning';
         const active = toolsForTarget(state.scanTarget).includes(status.tool) ? 'active-tool' : '';
+        const disabled = cached.has(status.tool) ? '' : 'disabled';
         return `<div class="tool-item ${active}">
-          <strong>${escapeHtml(status.tool)}</strong>
+          <div class="tool-item-header">
+            <strong>${escapeHtml(toolLabel(status.tool))}</strong>
+            <button class="tool-item-delete" type="button" data-delete-tool="${escapeHtml(status.tool)}" title="${escapeHtml(toolLabel(status.tool))} sonuçlarını sil" aria-label="${escapeHtml(toolLabel(status.tool))} sonuçlarını sil" ${disabled}>
+              <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2l1 10h4l1-10h2l-1.2 12H8.2L7 9Z"/></svg>
+            </button>
+          </div>
           <span class="badge ${cls}">${escapeHtml(status.status)}</span>
           <small>${escapeHtml(status.message || `${status.issue_count} bulgu`)}</small>
         </div>`;
       }).join('');
+      $('tool-strip').querySelectorAll('[data-delete-tool]').forEach((button) => {
+        button.addEventListener('click', () => deleteAnalysisResults([button.dataset.deleteTool]));
+      });
     }
 
     function renderFilterOptions() {
       const severities = unique(state.issues.map((issue) => issue.severity));
-      const tools = unique(state.issues.map((issue) => issue.tool));
+      const issueTools = unique(state.issues.map((issue) => normalizeToolName(issue.tool)));
+      const toolValues = unique([...TOOL_CATALOG.map((tool) => tool.value), ...issueTools]);
+      const tools = toolValues.map((value) => ({ value, label: toolLabel(value) }));
       const categories = unique(state.issues.map((issue) => issue.category));
       fillSelect('filter-severity', severities, 'Severity');
-      fillSelect('filter-tool', tools, 'Tool');
+      fillSelectOptions('filter-tool', tools, 'Tool');
       fillSelect('issues-severity', severities, 'Severity');
-      fillSelect('issues-tool', tools, 'Tool');
+      fillSelectOptions('issues-tool', tools, 'Tool');
       fillSelect('issues-category', categories, 'Category');
     }
 
@@ -1448,19 +1618,24 @@
       const body = $(targetId);
       const visible = issues.slice(0, limit);
       if (!visible.length) {
-        const colspan = targetId === 'issues-table' ? 9 : 8;
+        const colspan = targetId === 'issues-table' ? 10 : 8;
         body.innerHTML = `<tr><td colspan="${colspan}"><div class="empty">Filtreye uyan bulgu yok.</div></td></tr>`;
         return;
       }
       body.innerHTML = visible.map((issue) => {
         const selected = issue.id === state.selectedIssueId ? 'selected' : '';
         const categoryCell = targetId === 'issues-table' ? `<td>${escapeHtml(issue.category || '')}</td>` : '';
-        return `<tr class="${selected}" data-issue-id="${escapeHtml(issue.id)}">
+        const workflow = issueWorkflow(issue);
+        const statusCell = targetId === 'issues-table'
+          ? `<td class="status-cell"><span class="badge ${workflow.badge}">${escapeHtml(workflow.label)}</span></td>`
+          : '';
+        return `<tr class="${selected} ${escapeHtml(workflow.status)}" data-issue-id="${escapeHtml(issue.id)}">
+          ${statusCell}
           <td><span class="badge ${severityClass(issue.severity)}">${escapeHtml(issue.severity || 'INFO')}</span></td>
           <td><span class="badge ${escapeHtml(issue.priority_class || 'muted')}">${escapeHtml(issue.priority_label || 'P3 Bakım')}</span></td>
           <td><span class="badge ${issue.is_common ? 'ok' : 'muted'}">${escapeHtml(issue.support_count || 1)} tool</span></td>
           ${categoryCell}
-          <td>${escapeHtml(issue.tool || 'pyshield')}</td>
+          <td>${escapeHtml(toolLabel(issue.tool || 'pyshield'))}</td>
           <td>${escapeHtml(issue.rule_id || '')}</td>
           <td class="path-cell" title="${escapeHtml(issue.file_path || '')}">${escapeHtml(shortPath(issue.file_path || ''))}</td>
           <td>${escapeHtml(issue.line || 1)}</td>
@@ -1479,18 +1654,21 @@
       const issuesView = applyIssueFilters(state.issues, 'issues');
       $('issue-count-label').textContent = overviewIssues.length;
       renderIssueRows('overview-issues', overviewIssues, 80);
-      renderIssueRows('issues-table', issuesView, 500);
+      renderIssueRows('issues-table', issuesView);
       renderCommonFindings();
       renderIssueDetail();
     }
 
     function renderCommonFindings() {
       const el = $('common-findings');
+      el.classList.toggle('expanded', state.commonFindingsExpanded);
+      $('btn-toggle-common').textContent = state.commonFindingsExpanded ? 'Daralt' : 'Genişlet';
       if (!state.commonFindings.length) {
         el.innerHTML = '<div class="empty">Ortak bulgu yok.</div>';
         return;
       }
-      el.innerHTML = state.commonFindings.slice(0, 8).map((item) => `
+      const visible = state.commonFindingsExpanded ? state.commonFindings : state.commonFindings.slice(0, 6);
+      el.innerHTML = visible.map((item) => `
         <button type="button" class="btn" style="justify-content:flex-start;width:100%" data-common-key="${escapeHtml(item.key)}">
           <span class="badge ${escapeHtml(item.priority_class)}">${escapeHtml(item.priority_label)}</span>
           <span class="badge ok">${escapeHtml(item.strength)} tool</span>
@@ -1529,22 +1707,51 @@
       const html = issue ? issueDetailHtml(issue) : '<div class="empty">Issue seçilmedi.</div>';
       $('issue-detail').innerHTML = html;
       $('issues-detail').innerHTML = html;
+      bindIssueDetailActions($('issue-detail'));
+      bindIssueDetailActions($('issues-detail'));
     }
 
     function issueDetailHtml(issue) {
+      const workflow = issueWorkflow(issue);
       return `
+        <div class="kv"><span>Status</span><strong><span class="badge ${workflow.badge}">${escapeHtml(workflow.label)}</span></strong></div>
         <div class="kv"><span>Severity</span><strong><span class="badge ${severityClass(issue.severity)}">${escapeHtml(issue.severity || 'INFO')}</span></strong></div>
         <div class="kv"><span>Priority</span><strong><span class="badge ${escapeHtml(issue.priority_class || 'muted')}">${escapeHtml(issue.priority_label || 'P3 Bakım')}</span></strong></div>
         <div class="kv"><span>Strength</span><strong><span class="badge ${issue.is_common ? 'ok' : 'muted'}">${escapeHtml(issue.support_count || 1)} tool</span></strong></div>
-        <div class="kv"><span>Also Found</span><strong>${escapeHtml((issue.support_tools || []).join(', ') || issue.tool || 'pyshield')}</strong></div>
-        <div class="kv"><span>Tool</span><strong>${escapeHtml(issue.tool || 'pyshield')}</strong></div>
+        <div class="kv"><span>Also Found</span><strong>${escapeHtml((issue.support_tools || []).map(toolLabel).join(', ') || toolLabel(issue.tool || 'pyshield'))}</strong></div>
+        <div class="kv"><span>Tool</span><strong>${escapeHtml(toolLabel(issue.tool || 'pyshield'))}</strong></div>
         <div class="kv"><span>Rule</span><strong>${escapeHtml(issue.rule_id || '')}</strong></div>
         <div class="kv"><span>Category</span><strong>${escapeHtml(issue.category || '')}</strong></div>
         <div class="kv"><span>Location</span><strong>${escapeHtml(shortPath(issue.file_path || ''))}:${escapeHtml(issue.line || 1)}</strong></div>
         <div class="code">${escapeHtml(issue.code_snippet || '(snippet yok)')}</div>
         <p>${escapeHtml(issue.message || '')}</p>
         ${issue.fix_hint ? `<p><strong>Fix:</strong> ${escapeHtml(issue.fix_hint)}</p>` : ''}
+        <div class="issue-actions">
+          <textarea class="textarea workflow-note" data-issue-note placeholder="Not">${escapeHtml(issue.review_note || '')}</textarea>
+          <div class="issue-actions-row">
+            <button class="btn primary" type="button" data-issue-action="completed">Completed</button>
+            <button class="btn" type="button" data-issue-action="save-note">Save Note</button>
+            <button class="btn danger" type="button" data-issue-action="delete">Delete Issue</button>
+          </div>
+        </div>
       `;
+    }
+
+    function bindIssueDetailActions(root) {
+      root.querySelectorAll('[data-issue-action]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const note = root.querySelector('[data-issue-note]')?.value || '';
+          if (button.dataset.issueAction === 'completed') {
+            updateSelectedIssue({ status: 'completed', note });
+          } else if (button.dataset.issueAction === 'save-note') {
+            const currentStatus = selectedIssue()?.workflow_status || 'open';
+            const status = currentStatus === 'completed' ? 'completed' : (note.trim() ? 'review' : 'open');
+            updateSelectedIssue({ status, note });
+          } else if (button.dataset.issueAction === 'delete') {
+            deleteSelectedIssue();
+          }
+        });
+      });
     }
 
     function shortPath(path) {
@@ -1613,12 +1820,77 @@
       const folderPath = projectPath();
       if (!folderPath) return toast('Proje path boş.');
       if (!state.issues.length) return toast('Export için önce analiz bulgusu gerekli.');
+      const filtered = filteredIssuesFor('issues');
+      if (!filtered.length) return toast('Export için filtreye uyan bulgu yok.');
       setBusy(true, `${format.toUpperCase()} export`);
       try {
-        const path = await invoke('export_analysis_report', { folderPath, format });
-        toast(`${format.toUpperCase()} export hazır: ${path}`);
+        const issueKeys = filtered.map((issue) => issue.key);
+        const path = await invoke('export_analysis_report', { folderPath, format, issueKeys });
+        toast(`${format.toUpperCase()} export hazır: ${path} (${filtered.length} bulgu)`);
       } catch (error) {
         toast(`Export hatası: ${error.message || error}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function updateSelectedIssue({ status, note, hidden = false }) {
+      const folderPath = projectPath();
+      const issue = selectedIssue();
+      if (!folderPath) return toast('Proje path boş.');
+      if (!issue) return toast('Önce bir issue seçin.');
+      setBusy(true, hidden ? 'Issue siliniyor' : 'Issue güncelleniyor');
+      try {
+        const raw = await invoke('update_issue_override', {
+          folderPath,
+          issueKey: issue.key,
+          status,
+          note,
+          hidden,
+        });
+        const report = parseJson(raw);
+        setReport(report?.summary ? report : null);
+        toast(hidden ? 'Issue listeden silindi' : 'Issue state kaydedildi');
+      } catch (error) {
+        toast(`Issue güncelleme hatası: ${error.message || error}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function deleteSelectedIssue() {
+      const issue = selectedIssue();
+      if (!issue) return toast('Önce bir issue seçin.');
+      if (!window.confirm(`${shortPath(issue.file_path || '')}:${issue.line || 1} issue listeden silinsin mi?`)) return;
+      updateSelectedIssue({
+        status: issue.workflow_status || 'open',
+        note: issue.review_note || '',
+        hidden: true,
+      });
+    }
+
+    function issueViewDeleteTools() {
+      const selectedTool = $('issues-tool')?.value || '';
+      if (selectedTool) return [selectedTool];
+      return toolsForTarget(state.scanTarget);
+    }
+
+    async function deleteAnalysisResults(tools = toolsForTarget(state.scanTarget)) {
+      const folderPath = projectPath();
+      if (!folderPath) return toast('Proje path boş.');
+      const canonicalTools = unique(tools.map(normalizeToolName).filter((tool) => TOOL_CATALOG.some((known) => known.value === tool)));
+      if (!canonicalTools.length) return toast('Silinecek analiz aracı seçilmedi.');
+      const label = toolSelectionLabel(canonicalTools);
+      if (!window.confirm(`${label} analiz sonuçları veritabanından silinsin mi?`)) return;
+
+      setBusy(true, `${label} sonuçları siliniyor`);
+      try {
+        const raw = await invoke('delete_cached_analysis', { folderPath, tools: canonicalTools });
+        const report = parseJson(raw);
+        setReport(report?.summary ? report : null);
+        toast(`${label} analiz sonuçları silindi`);
+      } catch (error) {
+        toast(`Silme hatası: ${error.message || error}`);
       } finally {
         setBusy(false);
       }
@@ -2022,6 +2294,7 @@
       $('btn-pick-folder').addEventListener('click', pickFolder);
       $('btn-run-scan').addEventListener('click', () => runScan(false));
       $('btn-force-rescan').addEventListener('click', () => runScan(true));
+      $('btn-delete-results').addEventListener('click', () => deleteAnalysisResults(toolsForTarget(state.scanTarget)));
       $('btn-git-status-top').addEventListener('click', runGitStatus);
       $('btn-refresh-status').addEventListener('click', runGitStatus);
       $('btn-git-status').addEventListener('click', runGitStatus);
@@ -2031,8 +2304,8 @@
       $('git-query').addEventListener('keydown', (event) => {
         if (event.key === 'Enter') runGitQuery();
       });
-      ['filter-severity', 'filter-tool', 'filter-text', 'issues-severity', 'issues-tool', 'issues-category'].forEach((id) => {
-        $(id).addEventListener(id === 'filter-text' ? 'input' : 'change', renderIssues);
+      ['filter-severity', 'filter-tool', 'filter-text', 'issues-severity', 'issues-tool', 'issues-category', 'issues-text'].forEach((id) => {
+        $(id).addEventListener(id === 'filter-text' || id === 'issues-text' ? 'input' : 'change', renderIssues);
       });
       $('settings-provider').addEventListener('change', () => {
         state.activeProvider = $('settings-provider').value;
@@ -2048,6 +2321,11 @@
       $('btn-ai-query').addEventListener('click', runAiGitNexus);
       $('btn-export-csv').addEventListener('click', () => exportReport('csv'));
       $('btn-export-xlsx').addEventListener('click', () => exportReport('xlsx'));
+      $('btn-delete-issues-results').addEventListener('click', () => deleteAnalysisResults(issueViewDeleteTools()));
+      $('btn-toggle-common').addEventListener('click', () => {
+        state.commonFindingsExpanded = !state.commonFindingsExpanded;
+        renderCommonFindings();
+      });
       $('project-path').addEventListener('change', async () => {
         localStorage.setItem('pyshield.projectPath', $('project-path').value.trim());
         await loadCachedAnalysis(false);

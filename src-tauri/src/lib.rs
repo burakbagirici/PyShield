@@ -26,6 +26,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             run_analysis_on_folder,
             load_cached_analysis,
+            delete_cached_analysis,
+            update_issue_override,
             export_analysis_report,
             run_gitnexus_status,
             run_gitnexus_analyze,
@@ -74,10 +76,51 @@ fn load_cached_analysis(app: AppHandle, folder_path: String) -> Result<String, S
 }
 
 #[tauri::command]
+fn delete_cached_analysis(
+    app: AppHandle,
+    folder_path: String,
+    tools: Option<Vec<String>>,
+) -> Result<String, String> {
+    if folder_path.trim().is_empty() {
+        return Err("Silme için proje path boş olamaz.".to_string());
+    }
+    let cache_tools = cache_tools_for_selection(tools.as_deref(), Some(true));
+    if cache_tools.is_empty() {
+        return Err("Silinecek analiz aracı seçilmedi.".to_string());
+    }
+
+    let conn = open_settings_db(&app)?;
+    clear_cached_tool_runs(&conn, &folder_path, &cache_tools)?;
+    cached_analysis_json(&conn, &folder_path)
+}
+
+#[tauri::command]
+fn update_issue_override(
+    app: AppHandle,
+    folder_path: String,
+    issue_key: String,
+    status: Option<String>,
+    note: Option<String>,
+    hidden: Option<bool>,
+) -> Result<String, String> {
+    if folder_path.trim().is_empty() {
+        return Err("Issue güncelleme için proje path boş olamaz.".to_string());
+    }
+    if issue_key.trim().is_empty() {
+        return Err("Issue güncelleme için issue key boş olamaz.".to_string());
+    }
+
+    let conn = open_settings_db(&app)?;
+    upsert_issue_override(&conn, &folder_path, &issue_key, status, note, hidden)?;
+    cached_analysis_json(&conn, &folder_path)
+}
+
+#[tauri::command]
 fn export_analysis_report(
     app: AppHandle,
     folder_path: String,
     format: String,
+    issue_keys: Option<Vec<String>>,
 ) -> Result<String, String> {
     let conn = open_settings_db(&app)?;
     let report = combined_cached_report(&conn, &folder_path)?;
@@ -85,17 +128,20 @@ fn export_analysis_report(
         return Err("Export için önce en az bir analiz çalıştırın.".to_string());
     }
 
-    let rows = export_rows(&report);
+    let mut rows = export_rows(&report);
+    let selected_keys: BTreeSet<String> = issue_keys
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|key| !key.trim().is_empty())
+        .collect();
+    if !selected_keys.is_empty() {
+        rows.retain(|row| selected_keys.contains(&row.issue_key));
+    }
     if rows.is_empty() {
         return Err("Export edilecek bulgu yok.".to_string());
     }
 
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("App data dizini bulunamadı: {}", e))?
-        .join("exports");
-    fs::create_dir_all(&dir).map_err(|e| format!("Export dizini oluşturulamadı: {}", e))?;
+    let dir = export_dir(&app)?;
 
     let stamp = unix_stamp();
     match format.trim().to_ascii_lowercase().as_str() {
@@ -111,6 +157,19 @@ fn export_analysis_report(
         }
         other => Err(format!("Bilinmeyen export formatı: {}", other)),
     }
+}
+
+fn export_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = match app.path().download_dir() {
+        Ok(dir) => dir,
+        Err(_) => app
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("Export dizini bulunamadı: {}", e))?
+            .join("exports"),
+    };
+    fs::create_dir_all(&dir).map_err(|e| format!("Export dizini oluşturulamadı: {}", e))?;
+    Ok(dir)
 }
 
 #[tauri::command]
@@ -300,6 +359,14 @@ struct CachedToolRun {
 }
 
 #[derive(Clone)]
+struct IssueOverride {
+    status: String,
+    note: String,
+    hidden: bool,
+    updated_at: String,
+}
+
+#[derive(Clone)]
 struct SummaryCounts {
     syntax_errors: usize,
     hallucinations: usize,
@@ -366,6 +433,9 @@ impl SummaryCounts {
 
 #[derive(Clone)]
 struct ExportIssueRow {
+    issue_key: String,
+    workflow_status: String,
+    review_note: String,
     severity: String,
     priority: String,
     category: String,
@@ -544,12 +614,201 @@ fn load_cached_tool_runs(
     Ok(runs)
 }
 
+fn upsert_issue_override(
+    conn: &Connection,
+    project_path: &str,
+    issue_key: &str,
+    status: Option<String>,
+    note: Option<String>,
+    hidden: Option<bool>,
+) -> Result<(), String> {
+    let existing = load_issue_override(conn, project_path, issue_key)?;
+    let current_status = existing
+        .as_ref()
+        .map(|override_row| override_row.status.as_str())
+        .unwrap_or("open");
+    let next_status = status
+        .as_deref()
+        .map(normalize_issue_status)
+        .unwrap_or_else(|| current_status.to_string());
+    let next_note = note
+        .or_else(|| existing.as_ref().map(|override_row| override_row.note.clone()))
+        .unwrap_or_default();
+    let next_hidden = hidden.unwrap_or_else(|| existing.as_ref().is_some_and(|row| row.hidden));
+
+    conn.execute(
+        "INSERT INTO issue_overrides(project_path, issue_key, status, note, hidden, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))
+         ON CONFLICT(project_path, issue_key) DO UPDATE SET
+           status = excluded.status,
+           note = excluded.note,
+           hidden = excluded.hidden,
+           updated_at = excluded.updated_at",
+        params![
+            project_path,
+            issue_key,
+            next_status,
+            next_note,
+            if next_hidden { 1 } else { 0 }
+        ],
+    )
+    .map_err(|e| format!("Issue state kaydedilemedi: {}", e))?;
+    Ok(())
+}
+
+fn normalize_issue_status(status: &str) -> String {
+    match status.trim().to_ascii_lowercase().as_str() {
+        "completed" | "done" | "resolved" => "completed".to_string(),
+        "review" | "note" | "noted" => "review".to_string(),
+        _ => "open".to_string(),
+    }
+}
+
+fn load_issue_override(
+    conn: &Connection,
+    project_path: &str,
+    issue_key: &str,
+) -> Result<Option<IssueOverride>, String> {
+    conn.query_row(
+        "SELECT status, note, hidden, updated_at
+         FROM issue_overrides
+         WHERE project_path = ?1 AND issue_key = ?2",
+        params![project_path, issue_key],
+        |row| {
+            Ok(IssueOverride {
+                status: row.get(0)?,
+                note: row.get(1)?,
+                hidden: row.get::<_, i64>(2)? != 0,
+                updated_at: row.get(3)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(|e| format!("Issue state okunamadı: {}", e))
+}
+
+fn load_issue_overrides(
+    conn: &Connection,
+    project_path: &str,
+) -> Result<HashMap<String, IssueOverride>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT issue_key, status, note, hidden, updated_at
+             FROM issue_overrides
+             WHERE project_path = ?1",
+        )
+        .map_err(|e| format!("Issue state sorgusu hazırlanamadı: {}", e))?;
+    let rows = stmt
+        .query_map(params![project_path], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                IssueOverride {
+                    status: row.get(1)?,
+                    note: row.get(2)?,
+                    hidden: row.get::<_, i64>(3)? != 0,
+                    updated_at: row.get(4)?,
+                },
+            ))
+        })
+        .map_err(|e| format!("Issue state sorgulanamadı: {}", e))?;
+
+    let mut overrides = HashMap::new();
+    for row in rows {
+        let (issue_key, override_row) =
+            row.map_err(|e| format!("Issue state satırı okunamadı: {}", e))?;
+        overrides.insert(issue_key, override_row);
+    }
+    Ok(overrides)
+}
+
+fn apply_issue_overrides(report: &mut Value, overrides: &HashMap<String, IssueOverride>) {
+    if overrides.is_empty() {
+        add_default_issue_state(report);
+        return;
+    }
+
+    if let Some(files) = report.get_mut("files").and_then(Value::as_array_mut) {
+        for file in files {
+            let fallback_path = file
+                .get("file_path")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let Some(issues) = file.get_mut("issues").and_then(Value::as_array_mut) else {
+                continue;
+            };
+
+            let mut filtered = Vec::new();
+            for mut issue in std::mem::take(issues) {
+                if issue
+                    .get("file_path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .is_empty()
+                {
+                    issue["file_path"] = Value::String(fallback_path.clone());
+                }
+
+                let key = issue_key(&issue);
+                issue["issue_key"] = Value::String(key.clone());
+                if let Some(override_row) = overrides.get(&key) {
+                    if override_row.hidden {
+                        continue;
+                    }
+                    issue["workflow_status"] = Value::String(override_row.status.clone());
+                    issue["review_note"] = Value::String(override_row.note.clone());
+                    issue["workflow_updated_at"] = Value::String(override_row.updated_at.clone());
+                } else {
+                    issue["workflow_status"] = Value::String("open".to_string());
+                    issue["review_note"] = Value::String(String::new());
+                }
+                filtered.push(issue);
+            }
+            *issues = filtered;
+        }
+    }
+    recompute_report(report);
+}
+
+fn add_default_issue_state(report: &mut Value) {
+    if let Some(files) = report.get_mut("files").and_then(Value::as_array_mut) {
+        for file in files {
+            let fallback_path = file
+                .get("file_path")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            for issue in file
+                .get_mut("issues")
+                .and_then(Value::as_array_mut)
+                .into_iter()
+                .flatten()
+            {
+                if issue
+                    .get("file_path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .is_empty()
+                {
+                    issue["file_path"] = Value::String(fallback_path.clone());
+                }
+                issue["issue_key"] = Value::String(issue_key(issue));
+                issue["workflow_status"] = Value::String("open".to_string());
+                issue["review_note"] = Value::String(String::new());
+            }
+        }
+    }
+}
+
 fn combined_cached_report(conn: &Connection, project_path: &str) -> Result<Value, String> {
     let runs = load_cached_tool_runs(conn, project_path)?;
     if runs.is_empty() {
         return Ok(Value::Null);
     }
-    Ok(combine_tool_runs(project_path, &runs))
+    let mut report = combine_tool_runs(project_path, &runs);
+    let overrides = load_issue_overrides(conn, project_path)?;
+    apply_issue_overrides(&mut report, &overrides);
+    Ok(report)
 }
 
 fn combine_tool_runs(project_path: &str, runs: &[CachedToolRun]) -> Value {
@@ -792,9 +1051,7 @@ fn recompute_report(report: &mut Value) {
                 .and_then(Value::as_str)
                 .map(canonical_tool_name)
                 .unwrap_or_default();
-            if let Some(count) = issue_counts.get(&tool) {
-                status["issue_count"] = json!(count);
-            }
+            status["issue_count"] = json!(issue_counts.get(&tool).copied().unwrap_or(0));
         }
     }
 }
@@ -854,8 +1111,8 @@ fn issue_key(issue: &Value) -> String {
         issue
             .get("tool")
             .and_then(Value::as_str)
-            .unwrap_or("pyshield")
-            .to_string(),
+            .map(canonical_tool_name)
+            .unwrap_or_else(|| "pyshield".to_string()),
         issue
             .get("rule_id")
             .and_then(Value::as_str)
@@ -920,6 +1177,9 @@ fn export_rows(report: &Value) -> Vec<ExportIssueRow> {
             let severity = string_field(&issue, "severity");
             let rule_id = string_field(&issue, "rule_id");
             ExportIssueRow {
+                issue_key: issue_key(&issue),
+                workflow_status: string_field(&issue, "workflow_status"),
+                review_note: string_field(&issue, "review_note"),
                 severity: severity.clone(),
                 priority: priority_for(&category, &severity, &rule_id),
                 category,
@@ -1082,6 +1342,9 @@ fn write_xlsx_export(path: &PathBuf, rows: &[ExportIssueRow]) -> Result<(), Stri
 
 fn export_headers() -> Vec<&'static str> {
     vec![
+        "issue_key",
+        "workflow_status",
+        "review_note",
         "severity",
         "priority",
         "category",
@@ -1102,6 +1365,9 @@ fn export_headers() -> Vec<&'static str> {
 
 fn export_row_values(row: &ExportIssueRow) -> Vec<String> {
     vec![
+        row.issue_key.clone(),
+        row.workflow_status.clone(),
+        row.review_note.clone(),
         row.severity.clone(),
         row.priority.clone(),
         row.category.clone(),
@@ -1234,6 +1500,15 @@ fn open_settings_db(app: &AppHandle) -> Result<Connection, String> {
        report_json TEXT NOT NULL,
        updated_at TEXT NOT NULL,
        PRIMARY KEY(project_path, tool)
+     );
+     CREATE TABLE IF NOT EXISTS issue_overrides (
+       project_path TEXT NOT NULL,
+       issue_key TEXT NOT NULL,
+       status TEXT NOT NULL DEFAULT 'open',
+       note TEXT NOT NULL DEFAULT '',
+       hidden INTEGER NOT NULL DEFAULT 0,
+       updated_at TEXT NOT NULL,
+       PRIMARY KEY(project_path, issue_key)
      );",
     )
     .map_err(|e| format!("SQLite şeması oluşturulamadı: {}", e))?;
